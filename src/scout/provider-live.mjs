@@ -23,7 +23,7 @@
 import { randomUUID } from "node:crypto";
 
 import { makeHop } from "../types.mjs";
-import { ScoutRefusal } from "./errors.mjs";
+import { ScoutRefusal, scrubError, scrubText } from "./errors.mjs";
 
 const MESSAGES_ENDPOINT = "https://api.anthropic.com/v1/messages";
 const ANTHROPIC_VERSION = "2023-06-01";
@@ -38,12 +38,6 @@ export const DEFAULT_WEB_SEARCH_TOOL = "web_search_20250305";
 
 const MAX_SEARCH_USES = 4;
 const MAX_PAGE_CHARS = 40_000;
-
-/** Never let a credential ride out inside an error message. */
-function scrub(text, apiKey) {
-  const s = String(text ?? "");
-  return apiKey ? s.split(apiKey).join("[redacted]") : s;
-}
 
 function stripHtml(html) {
   return html
@@ -63,7 +57,7 @@ function stripHtml(html) {
 }
 
 /** The model's JSON, however it chose to wrap it. Refuses rather than guessing. */
-function parseCandidateJson(text, apiKey) {
+function parseCandidateJson(text, [apiKey]) {
   const fenced = text.match(/```(?:json)?\s*([\s\S]*?)```/i);
   const body = fenced ? fenced[1] : text;
   const start = body.indexOf("[");
@@ -72,14 +66,14 @@ function parseCandidateJson(text, apiKey) {
     throw new ScoutRefusal(
       `live mode could not parse the extractor response as a JSON array of candidate claims. ` +
         `Refusing rather than guessing at what the model meant. Response began: ` +
-        `${JSON.stringify(scrub(body, apiKey).slice(0, 200))}`,
+        `${JSON.stringify(scrubText(body, [apiKey]).slice(0, 200))}`,
     );
   try {
     const parsed = JSON.parse(body.slice(start, end + 1));
     if (!Array.isArray(parsed)) throw new Error("not an array");
     return parsed;
   } catch (err) {
-    throw new ScoutRefusal(`live mode could not parse the extractor response: ${scrub(err.message, apiKey)}`, { cause: err });
+    throw new ScoutRefusal(`live mode could not parse the extractor response: ${scrubText(err.message, [apiKey])}`, { cause: scrubError(err, [apiKey]) });
   }
 }
 
@@ -114,7 +108,7 @@ export function liveProvider(env = process.env, { fetchImpl = globalThis.fetch }
         body: JSON.stringify(body),
       });
     } catch (err) {
-      throw new ScoutRefusal(`live mode could not reach the Claude API during ${step}: ${scrub(err.message, apiKey)}`, { cause: err });
+      throw new ScoutRefusal(`live mode could not reach the Claude API during ${step}: ${scrubText(err.message, [apiKey])}`, { cause: scrubError(err, [apiKey]) });
     }
 
     if (!response.ok) {
@@ -125,16 +119,14 @@ export function liveProvider(env = process.env, { fetchImpl = globalThis.fetch }
         /* the status alone is enough to refuse on */
       }
       throw new ScoutRefusal(
-        `live mode refused: the Claude API returned HTTP ${response.status} during ${step}. ${scrub(detail, apiKey)}`,
+        `live mode refused: the Claude API returned HTTP ${response.status} during ${step}. ${scrubText(detail, [apiKey])}`,
       );
     }
 
     try {
       return await response.json();
     } catch (err) {
-      throw new ScoutRefusal(`live mode got a non-JSON response from the Claude API during ${step}: ${scrub(err.message, apiKey)}`, {
-        cause: err,
-      });
+      throw new ScoutRefusal(`live mode got a non-JSON response from the Claude API during ${step}: ${scrubText(err.message, [apiKey])}`, { cause: scrubError(err, [apiKey]) });
     }
   }
 
@@ -188,7 +180,7 @@ export function liveProvider(env = process.env, { fetchImpl = globalThis.fetch }
       try {
         response = await fetchImpl(url, { redirect: "follow" });
       } catch (err) {
-        throw new ScoutRefusal(`live mode could not fetch ${url}: ${scrub(err.message, apiKey)}`, { cause: err });
+        throw new ScoutRefusal(`live mode could not fetch ${url}: ${scrubText(err.message, [apiKey])}`, { cause: scrubError(err, [apiKey]) });
       }
       if (!response.ok)
         throw new ScoutRefusal(
@@ -267,7 +259,7 @@ export function liveProvider(env = process.env, { fetchImpl = globalThis.fetch }
         .map((b) => b.text)
         .join("\n");
 
-      return parseCandidateJson(text, apiKey);
+      return parseCandidateJson(text, [apiKey]);
     },
   });
 }

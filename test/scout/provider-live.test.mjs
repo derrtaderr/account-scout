@@ -232,14 +232,14 @@ test("proposeClaims parses the model's JSON candidates", async () => {
     jsonResponse(
       textBody(
         JSON.stringify([
-          { text: "Northwind builds automation.", kind: "factual", citations: [{ url: "https://a.example/", quote: "builds automation" }] },
+          { text: "Northwind builds warehouse automation systems.", kind: "factual", citations: [{ url: "https://a.example/", quote: "builds warehouse automation systems" }] },
         ]),
       ),
     ),
   );
   const candidates = await liveProvider(env(), { fetchImpl: impl }).proposeClaims({
     account: "Northwind Robotics",
-    hops: [{ url: "https://a.example/", title: "A", fetchedAt: "2026-09-07T00:00:00.000Z", content: "Northwind builds automation." }],
+    hops: [{ url: "https://a.example/", title: "A", fetchedAt: "2026-09-07T00:00:00.000Z", content: "Northwind builds warehouse automation systems." }],
   });
   assert.equal(candidates.length, 1);
   assert.equal(candidates[0].kind, "factual");

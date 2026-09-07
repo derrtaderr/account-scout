@@ -95,7 +95,7 @@ function stubProvider(over = {}) {
       return [];
     },
     async fetchPage(url) {
-      return makeHop({ url, title: "Stub", fetchedAt: "2026-09-07T00:00:00.000Z", content: "stub content here" });
+      return makeHop({ url, title: "Stub", fetchedAt: "2026-09-07T00:00:00.000Z", content: "stub content for the scout run" });
     },
     async proposeClaims() {
       return [];
@@ -148,7 +148,7 @@ test("an early stop still reports the hops it did fetch", async () => {
       return [{ url: "https://stub.example/a", title: "A" }];
     },
     async proposeClaims() {
-      return [{ text: "Stub Co exists.", kind: "factual", citations: [{ url: "https://stub.example/a", quote: "stub content" }] }];
+      return [{ text: "Stub Co exists.", kind: "factual", citations: [{ url: "https://stub.example/a", quote: "stub content for the scout" }] }];
     },
   });
   const report = await runScout({ request: stubRequest, provider, now: FROZEN_NOW });

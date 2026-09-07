@@ -1,0 +1,6 @@
+{
+  "accountName": "Northwind Robotics",
+  "domain": "northwindrobotics.com",
+  "questions": [],
+  "note": "Synthetic SECURITY fixture. One hostile third-party page that prompt-injects the extractor, plus the trivial-quote candidates a successfully-injected extractor would emit. Its job is to fail loudly if the evidential floor is ever weakened: every candidate here must be refused, and claims[] must stay empty."
+}

@@ -64,7 +64,7 @@ test("a citation pointing at a URL never fetched this run is refused", () => {
   const unfetched = {
     text: "Northwind Robotics operates a plant in Osaka.",
     kind: "factual",
-    citations: [{ url: "https://northwindrobotics.com/osaka", quote: "our Osaka plant" }],
+    citations: [{ url: "https://northwindrobotics.com/osaka", quote: "our Osaka plant opened in 2025" }],
   };
   const { claims, refusals } = gate([unfetched]);
   assert.equal(claims.length, 0);
@@ -111,7 +111,7 @@ test("one bad citation refuses the whole claim — a valid half never launders t
     kind: "numeric",
     citations: [
       { url: PRESS, quote: "closed a 24 million euro Series B" },
-      { url: "https://northwindrobotics.com/osaka", quote: "our Osaka plant" },
+      { url: "https://northwindrobotics.com/osaka", quote: "our Osaka plant opened in 2025" },
     ],
   };
   const { claims, refusals } = gate([mixed]);
@@ -121,7 +121,7 @@ test("one bad citation refuses the whole claim — a valid half never launders t
 });
 
 test("an unrecognized claim kind is refused, never coerced into a valid one", () => {
-  const odd = { text: "Northwind feels promising.", kind: "vibes", citations: [{ url: OWN, quote: "founded in 2019" }] };
+  const odd = { text: "Northwind feels promising.", kind: "vibes", citations: [{ url: OWN, quote: "founded in 2019 in Rotterdam" }] };
   const { claims, refusals } = gate([odd]);
   assert.equal(claims.length, 0);
   assert.match(refusals[0].reason, new RegExp(CLAIM_KINDS.join("|")));
@@ -130,9 +130,9 @@ test("an unrecognized claim kind is refused, never coerced into a valid one", ()
 test("nothing is silently dropped: every candidate lands in claims or refusals", () => {
   const candidates = [
     good,
-    { text: "bad quote", kind: "numeric", citations: [{ url: OWN, quote: "nowhere at all" }] },
+    { text: "bad quote", kind: "numeric", citations: [{ url: OWN, quote: "nowhere at all in this fetched page" }] },
     { text: "no citations", kind: "causal", citations: [] },
-    { text: "bad kind", kind: "nope", citations: [{ url: OWN, quote: "founded in 2019" }] },
+    { text: "bad kind", kind: "nope", citations: [{ url: OWN, quote: "founded in 2019 in Rotterdam" }] },
   ];
   const { claims, refusals } = gate(candidates);
   assert.equal(claims.length + refusals.length, candidates.length);

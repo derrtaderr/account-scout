@@ -7,27 +7,45 @@
     {
       "query": "Northwind Robotics company overview",
       "results": [
-        { "url": "https://northwindrobotics.com/about", "title": "About — Northwind Robotics" },
-        { "url": "https://logisticsweekly.example/northwind-series-b", "title": "Northwind Robotics closes Series B — Logistics Weekly" }
+        {
+          "url": "https://northwindrobotics.com/about",
+          "title": "About — Northwind Robotics"
+        },
+        {
+          "url": "https://logisticsweekly.example/northwind-series-b",
+          "title": "Northwind Robotics closes Series B — Logistics Weekly"
+        }
       ]
     },
     {
       "query": "Northwind Robotics site:northwindrobotics.com",
       "results": [
-        { "url": "https://northwindrobotics.com/about", "title": "About — Northwind Robotics" },
-        { "url": "https://northwindrobotics.com/pricing", "title": "Pricing — Northwind Robotics" }
+        {
+          "url": "https://northwindrobotics.com/about",
+          "title": "About — Northwind Robotics"
+        },
+        {
+          "url": "https://northwindrobotics.com/pricing",
+          "title": "Pricing — Northwind Robotics"
+        }
       ]
     },
     {
       "query": "Northwind Robotics who leads revenue",
       "results": [
-        { "url": "https://podcast.example/northwind-ep-42", "title": "Episode 42: Ines Aldarov of Northwind Robotics" }
+        {
+          "url": "https://podcast.example/northwind-ep-42",
+          "title": "Episode 42: Ines Aldarov of Northwind Robotics"
+        }
       ]
     },
     {
       "query": "Northwind Robotics what is the pricing model",
       "results": [
-        { "url": "https://northwindrobotics.com/pricing", "title": "Pricing — Northwind Robotics" }
+        {
+          "url": "https://northwindrobotics.com/pricing",
+          "title": "Pricing — Northwind Robotics"
+        }
       ]
     }
   ],
@@ -88,7 +106,10 @@
       "text": "Northwind Robotics operates a robotics plant in Osaka.",
       "kind": "factual",
       "citations": [
-        { "url": "https://northwindrobotics.com/osaka", "quote": "our Osaka plant" }
+        {
+          "url": "https://northwindrobotics.com/osaka",
+          "quote": "our Osaka plant opened in 2025"
+        }
       ]
     },
     {

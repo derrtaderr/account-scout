@@ -39,7 +39,10 @@ import { ScoutRefusal } from "../scout/errors.mjs";
  * @param {(request: object) => Promise<object>} deps.providerFor builds the
  *   provider for a request (recorded picks the fixture; live returns the one
  *   live provider). Not called at all when the queue is idle.
- * @param {object} deps.egress a createEgress instance — owns the guarded writers
+ * @param {(request: object) => object} deps.egressFor the egress for a request —
+ *   a factory, not one shared instance, because a report about account A must
+ *   allow A's own domain while a report about B allows B's, and one egress
+ *   cannot hold both allow-lists at once.
  * @param {(request: object) => string} deps.reportPathFor where a delivered
  *   report for this request lands (must end in ".md")
  * @param {(request: object) => Promise<string|undefined>} [deps.briefFor] the
@@ -58,7 +61,7 @@ export async function drainOnce(deps) {
   const {
     queue,
     providerFor,
-    egress,
+    egressFor,
     reportPathFor,
     briefFor,
     process: processFn = processReport,
@@ -66,6 +69,7 @@ export async function drainOnce(deps) {
     configId,
     runIdFor = () => randomUUID(),
     maxHops,
+    gateN,
     now = () => new Date().toISOString(),
   } = deps;
 
@@ -91,16 +95,23 @@ export async function drainOnce(deps) {
   }
 
   const result = await processFn(report, {
-    egress,
+    egress: egressFor(request),
     reportPath: reportPathFor(request),
     telemetryPath,
     configId,
     runId: runIdFor(request),
+    gateN,
     now,
   });
 
-  // Every terminal decision completes the job — see the header note on step 4.
-  await queue.completeJob(request.requestId);
+  // A decision about the REPORT's content completes the job — delivered,
+  // quarantined, or egress-refused all mean "this report was judged, re-running
+  // decides the same." An autonomy refusal is NOT such a decision: it says the
+  // agent may not run unattended right now, the verified request is untouched,
+  // and consuming it would discard work no redelivery is coming for. So it
+  // stays visible for retry, exactly like a ScoutRefusal.
+  const permissionRefusal = result.status === "refused" && result.refusedBy === "autonomy";
+  if (!permissionRefusal) await queue.completeJob(request.requestId);
 
   return { requestId: request.requestId, attempt, result };
 }
@@ -125,10 +136,13 @@ export async function drainAll(deps, { max = Infinity } = {}) {
     const outcome = await drainOnce(deps);
     if (outcome.idle) break;
     worked.push(outcome);
-    // A job that could not complete (a refusal) would be handed back by nextJob
-    // on the next loop, spinning this pass. Stop and let the caller's cadence
-    // drive retries toward the poison exit.
-    if (outcome.refused) break;
+    // A job left UNcompleted this pass would be handed straight back by nextJob,
+    // spinning the loop. Both the ScoutRefusal path (outcome.refused) and an
+    // autonomy refusal (uncompleted on purpose) are such jobs — stop and let the
+    // caller's cadence drive retries, rather than tight-looping toward poison.
+    const autonomyRefusal =
+      outcome.result?.status === "refused" && outcome.result?.refusedBy === "autonomy";
+    if (outcome.refused || autonomyRefusal) break;
   }
   return worked;
 }

@@ -49,7 +49,7 @@ function makeHarness(overrides = {}) {
     providerFor: async () => recordedProvider(fixture("northwind-robotics")),
     reportPathFor: (request) => join(dir, "reports", `${request.requestId}.md`),
     telemetryPath: join(dir, "telemetry", "events.jsonl"),
-    egress,
+    egressFor: () => egress,
     now: FROZEN_NOW,
     runIdFor: (request) => `run-${request.requestId}`,
     ...overrides,
@@ -152,6 +152,54 @@ test("a defect in the pipeline propagates rather than silently completing the jo
 
   // The job was not completed — it is still the next job.
   assert.equal((await queue.nextJob())?.requestId, "req-w3");
+});
+
+test("an autonomy refusal does NOT complete the job — permission is not a decision about the report", async () => {
+  // A refused-by-egress or quarantine is a decision about THIS report's content;
+  // re-running decides the same, so the job is done. A refused-by-AUTONOMY is
+  // different: the agent lacks permission to run unattended right now, the
+  // verified request is untouched, and consuming it would discard work no
+  // redelivery is coming for. So it stays for retry, like a ScoutRefusal.
+  const { queue, deps } = makeHarness({
+    process: async () => ({
+      status: "refused",
+      refusedBy: "autonomy",
+      reason: "unattended mode needs 5 clean runs, the streak is 0",
+    }),
+  });
+  await queue.append(
+    makeResearchRequest({
+      accountName: "Northwind Robotics",
+      domain: "northwindrobotics.com",
+      requestId: "req-w5",
+    }),
+  );
+
+  const result = await drainOnce(deps);
+  assert.equal(result.result.refusedBy, "autonomy");
+
+  // Not completed — still the next job.
+  assert.equal((await queue.nextJob())?.requestId, "req-w5");
+});
+
+test("an egress refusal DOES complete the job — the report's content was decided", async () => {
+  const { queue, deps } = makeHarness({
+    process: async () => ({
+      status: "refused",
+      refusedBy: "egress",
+      reason: "a survivor tripped the gate",
+    }),
+  });
+  await queue.append(
+    makeResearchRequest({
+      accountName: "Northwind Robotics",
+      domain: "northwindrobotics.com",
+      requestId: "req-w6",
+    }),
+  );
+
+  await drainOnce(deps);
+  assert.equal(await queue.nextJob(), null, "an egress decision consumes the job");
 });
 
 test("the strategy brief reaches the run", async () => {

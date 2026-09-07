@@ -4,6 +4,9 @@
   "description": "A GTM account-research agent whose claims must survive. Every claim binds to a citation fetched in the same run; five first-party boundary repos run inside it: webhook-engine on ingress, a deterministic citation gate in the core, gtm-architect read via MCP, gtm-agent-evals deciding autonomy, redaction-gate on egress.",
   "type": "module",
   "license": "MIT",
+  "bin": {
+    "account-scout": "cli.mjs"
+  },
   "scripts": {
     "test": "node --test"
   },

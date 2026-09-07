@@ -65,3 +65,50 @@ test("a verified delivery becomes exactly one JSONL job carrying the request", a
   // The requestId IS the delivery id, so a replay cannot double-enqueue.
   assert.equal(jobs[0].request.requestId, "evt_northwind_001");
 });
+
+test("a delivery signed with the wrong secret is refused and enqueues nothing", async () => {
+  const dir = freshDir();
+  const ingress = createIngress({ secret: SECRET, jobsDir: dir });
+
+  // Signed with a different synthetic key, which is what an attacker has.
+  const { rawBody, headers } = signedDelivery(
+    { id: "evt_forged_001", accountName: "Acme Freight" },
+    { secret: "whsec_synthetic_wrong_key" },
+  );
+
+  const result = await ingress.handleDelivery(rawBody, headers);
+
+  assert.equal(result.status, 401);
+  assert.equal(result.outcome, "rejected");
+  assert.equal(result.reason, "no_matching_signature", "the refusal names what was wrong");
+  assert.equal(readJobs(dir).length, 0, "an unverified delivery never becomes a job");
+
+  // And it fills nothing durable either. webhook-engine verifies BEFORE it parses or
+  // stores, so an unauthenticated caller can exhaust neither the idempotency store
+  // nor the dead letter queue. See the deviation note in src/ingress/WIRING.md.
+  assert.equal((await ingress.dlq.list()).length, 0);
+});
+
+// The positive control for the test above. Same bytes, same headers, same delivery —
+// the only thing that changes is which secret the intake holds. It proves the refusal
+// is decided by the signature comparison rather than by something incidental (a
+// malformed header, a missing timestamp), which is what would make the test vacuous.
+test("the same bytes that were refused are accepted by the intake holding the matching secret", async () => {
+  const dir = freshDir();
+  const forgedKey = "whsec_synthetic_wrong_key";
+
+  const { rawBody, headers } = signedDelivery(
+    { id: "evt_forged_001", accountName: "Acme Freight" },
+    { secret: forgedKey },
+  );
+
+  const refusing = createIngress({ secret: SECRET, jobsDir: freshDir() });
+  assert.equal((await refusing.handleDelivery(rawBody, headers)).status, 401);
+
+  const accepting = createIngress({ secret: forgedKey, jobsDir: dir });
+  const result = await accepting.handleDelivery(rawBody, headers);
+
+  assert.equal(result.status, 200);
+  assert.equal(result.outcome, "processed");
+  assert.equal(readJobs(dir).length, 1);
+});

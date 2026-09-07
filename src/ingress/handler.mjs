@@ -6,7 +6,7 @@
 // validated ResearchRequest on the job queue.
 
 import { createHash } from "node:crypto";
-import { createEngine } from "webhook-engine";
+import { createEngine, MemoryDeadLetterQueue } from "webhook-engine";
 import { makeResearchRequest } from "../types.mjs";
 import { createJobQueue } from "./queue.mjs";
 
@@ -95,16 +95,50 @@ function resolveRequestId(body, headers, rawText) {
 }
 
 /**
+ * Store one record per distinct event id.
+ *
+ * The engine releases the idempotency key after dead lettering, deliberately, so a
+ * manual replay of a dead lettered event is allowed to run. Combined with a key that
+ * is the content hash, that means the same malformed bytes redelivered N times push
+ * N identical records — and `MemoryDeadLetterQueue` throws rather than evicting when
+ * it fills, so a provider retrying broken bytes on a schedule would eventually take
+ * the endpoint down with duplicates of one payload.
+ *
+ * Identical bytes are identical evidence. Keeping the first is keeping all of it.
+ * Dedup is derived from what the inner queue actually holds rather than a private
+ * Set, so a drained record can be recorded again and the two can never disagree.
+ */
+function dedupingDeadLetterQueue(inner) {
+  return {
+    async push(record) {
+      const existing = (await inner.list()).find((r) => r.eventId === record.eventId);
+      return existing ?? inner.push(record);
+    },
+    list: (...args) => inner.list(...args),
+    get: (...args) => inner.get(...args),
+    remove: (...args) => inner.remove(...args),
+  };
+}
+
+/**
  * @param {object} options
  * @param {string|string[]} options.secret signing key, or several during a rotation
  * @param {string} [options.jobsDir] directory for the JSONL queue
  * @param {object} [options.queue] a pre-built queue, mostly for tests
+ * @param {object} [options.dlq] dead letter backend; wrapped for dedup either way
  */
-export function createIngress({ secret, jobsDir = "jobs", queue = createJobQueue({ dir: jobsDir }), ...engineOptions } = {}) {
+export function createIngress({
+  secret,
+  jobsDir = "jobs",
+  queue = createJobQueue({ dir: jobsDir }),
+  dlq = new MemoryDeadLetterQueue(),
+  ...engineOptions
+} = {}) {
   const engine = createEngine({
     secret,
     parse: reportingParse,
     eventId: resolveRequestId,
+    dlq: dedupingDeadLetterQueue(dlq),
     ...engineOptions,
     handler: async (event) => {
       const parseFailure = event.body?.[PARSE_FAILURE];

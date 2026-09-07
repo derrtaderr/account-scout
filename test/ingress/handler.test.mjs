@@ -246,6 +246,47 @@ test("a verified body with no requestId is refused naming the sender contract", 
   assert.match(records[0].errors[0].message, /signed body must carry requestId/);
 });
 
+// F2. The DLQ path must not depend on anything unsigned. With the header fallback
+// gone, a verified-but-malformed delivery that carries no webhook-id at all still
+// has to be recorded — otherwise the "evidence worth keeping" rationale evaporates
+// exactly when the sender is most obviously broken.
+test("verified garbage with no webhook-id header is dead lettered, keyed by content hash", async () => {
+  const dir = freshDir();
+  const ingress = createIngress({ secret: SECRET, jobsDir: dir });
+
+  const rawBody = '{"requestId":"evt_trailing"} and then trailing bytes';
+  const { headers } = signedDelivery(rawBody);
+  assert.equal(headers["webhook-id"], undefined, "nothing unsigned is in play");
+
+  const result = await ingress.handleDelivery(rawBody, headers);
+
+  assert.equal(result.status, 400);
+  assert.equal(result.outcome, "dead_lettered");
+  assert.equal(readJobs(dir).length, 0);
+
+  const records = await ingress.dlq.list();
+  assert.equal(records.length, 1);
+  assert.equal(records[0].eventId, hashKey(rawBody));
+  assert.match(records[0].errors[0].message, /JSON/i, "the record names what was wrong");
+});
+
+test("the same garbage bytes replayed keep exactly one dead letter record", async () => {
+  const dir = freshDir();
+  const ingress = createIngress({ secret: SECRET, jobsDir: dir });
+
+  const rawBody = "{not json at all";
+  const { headers } = signedDelivery(rawBody);
+
+  await ingress.handleDelivery(rawBody, headers);
+  await ingress.handleDelivery(rawBody, headers);
+  await ingress.handleDelivery(rawBody, headers);
+
+  const records = await ingress.dlq.list();
+  assert.equal(records.length, 1, "identical bytes are identical evidence, stored once");
+  assert.equal(records[0].eventId, hashKey(rawBody));
+  assert.equal(readJobs(dir).length, 0);
+});
+
 test("enqueueLocal skips HTTP but not validation", async () => {
   const dir = freshDir();
   const ingress = createIngress({ secret: SECRET, jobsDir: dir });

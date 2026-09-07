@@ -196,3 +196,37 @@ test("unattended processing proceeds once the streak is earned, and says so", as
   assert.equal(readEvents(deps.telemetryPath).length, 4, "the run itself joined the record");
   assert.equal(autonomyStreak(readEvents(deps.telemetryPath), RESEARCH_CONFIG_ID), 4);
 });
+
+test("REVIEWER SCENARIO 2: a delivered run's telemetry carries [client], never the roster term", async () => {
+  const { deps } = makeDeps();
+  // The reviewer's leak path: a warn-level eval rule (unsourced money claim)
+  // embeds the run's own sentence in its violation message. The guarded REPORT
+  // redacts the roster term to [client] and delivers — but the message used to
+  // flow to events.jsonl verbatim, making telemetry an unguarded exit.
+  // The figure is deliberately ABSENT from hop content, so the unsourced-money
+  // warn fires and embeds the sentence (term + figure) in its message.
+  const sentence = "Meridian Dynamics signed at $9.9 million according to the announcement.";
+  const hop = makeHop({
+    url: "https://northwind.example/about",
+    title: "About",
+    fetchedAt: "2026-09-07T12:00:00.000Z",
+    content: "Meridian Dynamics announced a partnership with Northwind Robotics for warehouse automation systems.",
+  });
+  const report = buildResearchReport({
+    request: makeResearchRequest({ accountName: "Northwind Robotics", domain: "northwind.example", requestId: "req-meridian" }),
+    hops: [hop],
+    claims: [makeClaim({
+      id: "c-m", kind: "numeric", tier: "primary",
+      text: sentence,
+      citations: [makeCitation({ url: hop.url, title: hop.title, fetchedAt: hop.fetchedAt, quote: "Meridian Dynamics announced a partnership" })],
+    })],
+    refusals: [],
+    meta: { mode: "recorded" },
+    generatedAt: "2026-09-07T12:00:05.000Z",
+  });
+  const result = await processReport(report, { ...deps, runId: "run-meridian" });
+  assert.equal(result.status, "delivered", `expected delivery, got ${result.status}: ${result.reason ?? ""}`);
+  const raw = readFileSync(deps.telemetryPath, "utf8");
+  assert.ok(raw.length > 0, "an event was recorded");
+  assert.ok(!raw.includes("Meridian Dynamics"), "the roster term must never reach telemetry");
+});

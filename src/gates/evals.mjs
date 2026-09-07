@@ -105,13 +105,23 @@ export async function recordVerdict({
   configId = RESEARCH_CONFIG_ID,
   telemetryPath = TELEMETRY_PATH,
   now = () => new Date().toISOString(),
+  redactText,
 }) {
+  // Telemetry is a byte exit like any other. Eval rules embed run sentences in
+  // their violation messages, so every string is redacted with the same config
+  // the report writer uses — events.jsonl is post-redaction by construction.
+  const scrub = redactText ?? ((t) => t);
+  const recorded = {
+    status: verdict.status,
+    violations: (verdict.violations ?? []).map((v) => ({ ...v, message: scrub(v.message) })),
+    reasons: (verdict.reasons ?? []).map(scrub),
+  };
   const event = {
     runId,
     timestamp: now(),
     configId,
     archetype: "research",
-    verdict,
+    verdict: recorded,
   };
   await makeJsonlSink(telemetryPath)(event);
   return event;

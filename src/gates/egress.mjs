@@ -18,7 +18,7 @@
 
 import { writeFileSync, mkdirSync } from "node:fs";
 import { dirname } from "node:path";
-import { createGate } from "redaction-gate";
+import { createGate, redact } from "redaction-gate";
 
 /**
  * The redaction config for the scout. Roster and allowDomains pass straight
@@ -92,7 +92,19 @@ export function serializeReport(report) {
  * }}
  */
 export function createEgress({ out = process.stdout, ...configOpts } = {}) {
-  const gate = createGate(scoutRedactionConfig(configOpts));
+  const config = scoutRedactionConfig(configOpts);
+  const gate = createGate(config);
+
+  /** Redact a single string with THIS egress's config. Fail closed: anything
+   *  redact refuses (a non-string included) comes back as a marker, never the
+   *  raw text — telemetry uses this so events.jsonl is post-redaction. */
+  const redactText = (text) => {
+    try {
+      return redact(String(text), config);
+    } catch (err) {
+      return `[unredactable: ${err?.name ?? "error"}]`;
+    }
+  };
 
   // The actual writers, each wrapped ONCE. guard() redacts, scans the redacted
   // text, and throws RedactionRefusal before the inner function runs when
@@ -121,6 +133,7 @@ export function createEgress({ out = process.stdout, ...configOpts } = {}) {
 
   return {
     gate,
+    redactText,
 
     /** Serialize and write the report to `path`. Refuses (throws
      *  RedactionRefusal) with nothing on disk when the gate trips. */

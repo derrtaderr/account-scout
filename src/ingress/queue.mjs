@@ -41,5 +41,44 @@ export function createJobQueue({ dir, now = () => new Date() }) {
     return job;
   }
 
-  return { append, pendingPath, completedPath, dir };
+  /** The requestIds already finished, read from disk so a restart is not a reset. */
+  function completedIds() {
+    return new Set(readLines(completedPath).map((entry) => entry.requestId));
+  }
+
+  /**
+   * The oldest job not yet completed, or null.
+   *
+   * A PEEK, NOT A POP. Removing the job at read time means a reader that crashes
+   * mid-research has consumed the job and produced nothing, and the verified
+   * request is gone with no redelivery coming — the provider already got its 200.
+   * The job stays visible until completeJob says the work is finished.
+   */
+  async function nextJob() {
+    const done = completedIds();
+    for (const job of readLines(pendingPath)) {
+      if (!done.has(job.requestId)) return job;
+    }
+    return null;
+  }
+
+  /**
+   * Record a job as finished. Returns false for a requestId that was never
+   * enqueued, rather than writing a completion for work that does not exist.
+   */
+  async function completeJob(requestId) {
+    const pending = readLines(pendingPath);
+    if (!pending.some((job) => job.requestId === requestId)) return false;
+    if (completedIds().has(requestId)) return false;
+
+    mkdirSync(dir, { recursive: true });
+    appendFileSync(
+      completedPath,
+      `${JSON.stringify({ requestId, completedAt: now().toISOString() })}\n`,
+      "utf8",
+    );
+    return true;
+  }
+
+  return { append, nextJob, completeJob, pendingPath, completedPath, dir };
 }

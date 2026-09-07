@@ -1,0 +1,122 @@
+{
+  "recordedWith": {
+    "mode": "recorded",
+    "note": "Hand-authored synthetic transcript, not a capture of a real model run. Lane E's recorder writes this same shape from a live run: searches[] keyed by the planner's exact query string, candidates[] exactly as the extractor proposed them BEFORE the gate saw them. Candidates are recorded unjudged on purpose — the fixture's job is to carry bad claims so the gate can be caught failing to refuse them."
+  },
+  "searches": [
+    {
+      "query": "Northwind Robotics company overview",
+      "results": [
+        {
+          "url": "https://northwindrobotics.com/about",
+          "title": "About — Northwind Robotics"
+        },
+        {
+          "url": "https://logisticsweekly.example/northwind-series-b",
+          "title": "Northwind Robotics closes Series B — Logistics Weekly"
+        }
+      ]
+    },
+    {
+      "query": "Northwind Robotics site:northwindrobotics.com",
+      "results": [
+        {
+          "url": "https://northwindrobotics.com/about",
+          "title": "About — Northwind Robotics"
+        },
+        {
+          "url": "https://northwindrobotics.com/pricing",
+          "title": "Pricing — Northwind Robotics"
+        }
+      ]
+    },
+    {
+      "query": "Northwind Robotics who leads revenue",
+      "results": [
+        {
+          "url": "https://podcast.example/northwind-ep-42",
+          "title": "Episode 42: Ines Aldarov of Northwind Robotics"
+        }
+      ]
+    },
+    {
+      "query": "Northwind Robotics what is the pricing model",
+      "results": [
+        {
+          "url": "https://northwindrobotics.com/pricing",
+          "title": "Pricing — Northwind Robotics"
+        }
+      ]
+    }
+  ],
+  "candidates": [
+    {
+      "text": "Northwind Robotics builds warehouse automation for mid-market third-party logistics operators.",
+      "kind": "factual",
+      "citations": [
+        {
+          "url": "https://northwindrobotics.com/about",
+          "quote": "builds warehouse automation for mid-market third-party logistics operators"
+        }
+      ]
+    },
+    {
+      "text": "Northwind Robotics closed a 24 million euro Series B led by Kettle Row Capital.",
+      "kind": "numeric",
+      "citations": [
+        {
+          "url": "https://logisticsweekly.example/northwind-series-b",
+          "quote": "closed a 24 million euro Series B led by Kettle Row Capital"
+        }
+      ]
+    },
+    {
+      "text": "Northwind moved to per-pick pricing because buyers said capital budgets were blocking deployment.",
+      "kind": "causal",
+      "citations": [
+        {
+          "url": "https://northwindrobotics.com/pricing",
+          "quote": "We moved to per-pick pricing in 2024 because buyers told us capital budgets were the thing blocking deployment"
+        }
+      ]
+    },
+    {
+      "text": "Northwind Robotics' revenue org is led by Marta Sundqvist.",
+      "kind": "factual",
+      "citations": [
+        {
+          "url": "https://podcast.example/northwind-ep-42",
+          "quote": "our revenue org is led by Marta Sundqvist"
+        }
+      ]
+    },
+    {
+      "_why": "MUST BE REFUSED. The fabricated funding number. Its quote appears in no fetched page, so the gate refuses it and names the quote.",
+      "text": "Northwind Robotics raised a $47 million Series C in March 2026.",
+      "kind": "numeric",
+      "citations": [
+        {
+          "url": "https://logisticsweekly.example/northwind-series-b",
+          "quote": "raised a $47 million Series C in March 2026 at a $310 million valuation"
+        }
+      ]
+    },
+    {
+      "_why": "MUST BE REFUSED. Cites a URL that was never fetched this run.",
+      "text": "Northwind Robotics operates a robotics plant in Osaka.",
+      "kind": "factual",
+      "citations": [
+        {
+          "url": "https://northwindrobotics.com/osaka",
+          "quote": "our Osaka plant opened in 2025"
+        }
+      ]
+    },
+    {
+      "_why": "MUST BE REFUSED. No citation at all — the classic confident uncited assertion.",
+      "text": "Northwind Robotics is the category leader in European warehouse automation.",
+      "kind": "factual",
+      "citations": []
+    }
+  ]
+}

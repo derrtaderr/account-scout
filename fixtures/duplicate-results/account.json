@@ -1,0 +1,6 @@
+{
+  "accountName": "Northwind Robotics",
+  "domain": "northwindrobotics.com",
+  "questions": [],
+  "note": "Synthetic regression fixture. Its one search records the SAME url twice, as a sloppy or re-run recorder would. The recorded provider must dedupe within a result list exactly as the live provider does, or a duplicated fixture URL becomes duplicate hops."
+}

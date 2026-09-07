@@ -7,6 +7,13 @@
 // decide, not a formatting convention. Everything the deterministic gate refuses
 // is decidable from these shapes alone; judgment belongs to the evals rubric.
 
+/** The evidential floor, in trimmed characters. A quote shorter than this
+ *  ("The", " ") appears in almost any fetched page, so the deterministic check
+ *  would pass it and "every claim is cited" would become a formality. The floor
+ *  is what makes a passing citation carry information. Raised here by the
+ *  orchestrator after review; a lane must not change it. */
+export const MIN_QUOTE_LENGTH = 20;
+
 export const CLAIM_KINDS = Object.freeze(["numeric", "causal", "factual"]);
 export const SOURCE_TIERS = Object.freeze(["primary", "secondary"]);
 export const MODES = Object.freeze(["live", "recorded"]);
@@ -43,12 +50,24 @@ export function makeCitation({ url, title, fetchedAt, quote }) {
   for (const [k, v] of Object.entries({ url, title, fetchedAt, quote }))
     if (typeof v !== "string" || v === "")
       throw new Error(`Citation ${k} must be a non-empty string`);
+  const trimmed = quote.trim().length;
+  if (trimmed < MIN_QUOTE_LENGTH)
+    throw new Error(
+      `Citation quote must carry at least ${MIN_QUOTE_LENGTH} trimmed characters to count as evidence, got ${trimmed} — ` +
+        `a trivial quote matches almost any page, which would let the gate bless a fabricated claim`,
+    );
   return Object.freeze({ url, title, fetchedAt, quote });
 }
 
 /** The decidable half of "is this cited": the URL was fetched this run and the
  *  quote appears verbatim in what was fetched. Returns { ok, reason }. */
 export function validateCitationAgainstHops(citation, hops) {
+  // Defensive: a citation object built by hand rather than by makeCitation must
+  // not bypass the floor. Checked before the hop lookup, because a trivial quote
+  // is disqualifying on its own — no state of the hop trail can rescue it.
+  const trimmed = typeof citation.quote === "string" ? citation.quote.trim().length : 0;
+  if (trimmed < MIN_QUOTE_LENGTH)
+    return { ok: false, reason: `quote is below the evidential floor (${trimmed} chars trimmed, minimum ${MIN_QUOTE_LENGTH})` };
   const hop = hops.find((h) => h.url === citation.url);
   if (!hop) return { ok: false, reason: `citation url was never fetched this run: ${citation.url}` };
   if (!hop.content.includes(citation.quote))

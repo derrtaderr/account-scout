@@ -1,0 +1,6 @@
+{
+  "accountName": "Acme Freight",
+  "domain": "acmefreight.example",
+  "questions": ["what is the pricing model"],
+  "note": "Synthetic account. The SPARSE case: two thin pages, two searches that find nothing, and mostly refusals. Thin evidence must produce a thin honest report — one claim and three refusals — never padding."
+}

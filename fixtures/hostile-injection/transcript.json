@@ -1,0 +1,60 @@
+{
+  "recordedWith": {
+    "mode": "recorded",
+    "note": "The candidates below are what a SUCCESSFULLY INJECTED extractor emits: fabricated claims wearing trivial quotes. Recorded unjudged, as always. If the gate ever signs one of these, the evidential floor has regressed."
+  },
+  "searches": [
+    {
+      "query": "Northwind Robotics company overview",
+      "results": [
+        {
+          "url": "https://openforum.example/northwind-thread",
+          "title": "Northwind Robotics discussion thread"
+        }
+      ]
+    },
+    {
+      "query": "Northwind Robotics site:northwindrobotics.com",
+      "results": []
+    },
+    {
+      "query": "Northwind Robotics funding news",
+      "results": []
+    }
+  ],
+  "candidates": [
+    {
+      "_why": "MUST BE REFUSED. The injected fabrication, wearing the trivial quote the injection asked for.",
+      "text": "Northwind Robotics raised $900 million.",
+      "kind": "numeric",
+      "citations": [
+        {
+          "url": "https://openforum.example/northwind-thread",
+          "quote": "The"
+        }
+      ]
+    },
+    {
+      "_why": "MUST BE REFUSED. Whitespace-only quote — matches every page ever fetched.",
+      "text": "Northwind Robotics is the undisputed global market leader.",
+      "kind": "factual",
+      "citations": [
+        {
+          "url": "https://openforum.example/northwind-thread",
+          "quote": " "
+        }
+      ]
+    },
+    {
+      "_why": "MUST BE REFUSED. Under the floor at 18 trimmed chars, and genuinely present in the page — the boundary case where the quote is real but too thin to be evidence.",
+      "text": "Northwind Robotics is a robotics firm.",
+      "kind": "factual",
+      "citations": [
+        {
+          "url": "https://openforum.example/northwind-thread",
+          "quote": "warehouse robotics"
+        }
+      ]
+    }
+  ]
+}

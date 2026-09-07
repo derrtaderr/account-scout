@@ -20,7 +20,7 @@ import { readFileSync } from "node:fs";
 import { join } from "node:path";
 
 import { makeHop } from "../types.mjs";
-import { ScoutRefusal } from "./errors.mjs";
+import { ScoutRefusal, scrubError } from "./errors.mjs";
 
 function readJson(dir, name) {
   const path = join(dir, name);
@@ -32,13 +32,13 @@ function readJson(dir, name) {
       `recorded mode cannot read the fixture store at ${path} — refusing rather than researching nothing. ` +
         `Record it with the Lane E recorder, or point --fixtures at a directory holding ` +
         `account.json, pages.json and transcript.json.`,
-      { cause: err },
+      { cause: scrubError(err) },
     );
   }
   try {
     return JSON.parse(raw);
   } catch (err) {
-    throw new ScoutRefusal(`fixture ${path} is not valid JSON: ${err.message}`, { cause: err });
+    throw new ScoutRefusal(`fixture ${path} is not valid JSON: ${err.message}`, { cause: scrubError(err) });
   }
 }
 

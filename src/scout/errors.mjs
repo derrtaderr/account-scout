@@ -17,8 +17,18 @@ export class ScoutRefusal extends Error {
   }
 }
 
+/**
+ * Secrets that may be in play anywhere in this process, whether or not the
+ * caller knows about them. Used as the default so code that wraps an error it
+ * did not create — runScout wrapping a provider someone else wrote — still
+ * scrubs, instead of trusting every future provider to be careful.
+ */
+export function ambientSecrets() {
+  return [process.env.ANTHROPIC_API_KEY].filter((s) => typeof s === "string" && s.trim() !== "");
+}
+
 /** Replace every secret with a marker. One helper, used everywhere. */
-export function scrubText(text, secrets = []) {
+export function scrubText(text, secrets = ambientSecrets()) {
   let out = String(text ?? "");
   for (const secret of secrets) if (secret) out = out.split(secret).join("[redacted]");
   return out;
@@ -48,7 +58,7 @@ const MAX_CAUSE_DEPTH = 10;
  * @param {string[]} secrets
  * @returns {Error} A clone that is safe to print.
  */
-export function scrubError(err, secrets = [], depth = 0, seen = new Set()) {
+export function scrubError(err, secrets = ambientSecrets(), depth = 0, seen = new Set()) {
   const flatten = (error) => {
     error.stack = `${error.name}: ${error.message}`;
     return error;

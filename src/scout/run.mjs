@@ -20,7 +20,7 @@
 import { planHops, DEFAULT_MAX_HOPS } from "./planner.mjs";
 import { gateCandidates } from "./gate.mjs";
 import { buildResearchReport } from "../report/build.mjs";
-import { ScoutRefusal } from "./errors.mjs";
+import { ScoutRefusal, scrubError, scrubText } from "./errors.mjs";
 
 /** Consecutive hops that surface no new URL before the run calls it exhausted. */
 export const BARREN_HOPS_BEFORE_STOP = 2;
@@ -31,7 +31,9 @@ async function closed(step, fn) {
     return await fn();
   } catch (err) {
     if (err instanceof ScoutRefusal) throw err;
-    throw new ScoutRefusal(`the run failed closed during ${step}: ${err.message}`, { cause: err });
+    // The provider may not be one this lane wrote. Scrub against ambient
+    // secrets rather than trusting every future provider to have been careful.
+    throw new ScoutRefusal(`the run failed closed during ${step}: ${scrubText(err.message)}`, { cause: scrubError(err) });
   }
 }
 

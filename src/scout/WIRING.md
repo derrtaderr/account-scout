@@ -41,8 +41,9 @@ from a thorough one that found less.
 
 ```js
 class ScoutRefusal extends Error   // .name === "ScoutRefusal"
-scrubText(text, secrets[]) => string
-scrubError(err, secrets[]) => Error   // safe-to-print clone; use for EVERY cause
+ambientSecrets() => string[]                  // secrets in play in this process
+scrubText(text, secrets = ambientSecrets()) => string
+scrubError(err, secrets = ambientSecrets()) => Error   // safe clone; use for EVERY cause
 ```
 
 The refusal/defect boundary. `ScoutRefusal` is the design working; any other
@@ -52,8 +53,10 @@ never swallow it.
 
 **If you attach a cause, scrub it.** Never `{ cause: err }` where `err` came
 from a call that saw a credential — use `{ cause: scrubError(err, [secret]) }`.
-`runScout` wraps provider errors without knowing any secrets, so a custom
-provider must not let a raw secret-bearing error escape it in the first place.
+Both helpers default to `ambientSecrets()`, so `runScout` scrubs errors from a
+provider it did not write rather than trusting every future provider to have
+been careful. A custom provider should still not let a raw secret-bearing error
+escape — the default is defence in depth, not permission to be sloppy.
 
 ### `src/scout/planner.mjs`
 

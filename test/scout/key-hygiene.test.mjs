@@ -156,3 +156,36 @@ test("scrubError drops the original stack, which can itself carry a key", () => 
   err.stack = `Error: boom\n    at fetch (https://api.example/?key=${KEY}:1:1)`;
   assert.equal(countKey(scrubError(err, [KEY])), 0);
 });
+
+// ---- defence in depth: the runner wraps errors from providers it did not write ----
+
+test("a third-party provider's raw secret-bearing error cannot leak through runScout", async () => {
+  const { runScout } = await import("../../src/scout/run.mjs");
+  const { makeResearchRequest } = await import("../../src/types.mjs");
+
+  process.env.ANTHROPIC_API_KEY = KEY;
+  try {
+    const rogue = {
+      mode: "recorded",
+      model: undefined,
+      async search() {
+        throw new Error(`upstream auth failed with ${KEY}`);
+      },
+      async fetchPage() {},
+      async proposeClaims() {
+        return [];
+      },
+    };
+    const err = await runScout({
+      request: makeResearchRequest({ accountName: "Stub Co", requestId: "req-rogue" }),
+      provider: rogue,
+    }).then(
+      () => null,
+      (e) => e,
+    );
+    assert.ok(err instanceof ScoutRefusal);
+    assert.equal(countKey(err), 0, "runScout must scrub what a provider it did not write hands it");
+  } finally {
+    delete process.env.ANTHROPIC_API_KEY;
+  }
+});

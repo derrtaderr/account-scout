@@ -2,7 +2,7 @@
 
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { mkdtempSync } from "node:fs";
+import { mkdtempSync, readFileSync, existsSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
@@ -11,6 +11,14 @@ import { makeResearchRequest } from "../../src/types.mjs";
 
 function freshDir() {
   return mkdtempSync(join(tmpdir(), "account-scout-queue-"));
+}
+
+function readJsonl(path) {
+  if (!existsSync(path)) return [];
+  return readFileSync(path, "utf8")
+    .split("\n")
+    .filter((line) => line.trim() !== "")
+    .map((line) => JSON.parse(line));
 }
 
 const request = (requestId, accountName) => makeResearchRequest({ accountName, requestId });
@@ -71,6 +79,53 @@ test("the jobs directory is created when it does not exist", async () => {
   await queue.append(request("req_001", "Northwind Robotics"));
 
   assert.equal((await queue.nextJob()).requestId, "req_001");
+});
+
+// F4. nextJob is a peek, which means a job that crashes its reader is handed back
+// forever. Without an exit, one poison payload stops the queue permanently and the
+// only symptom is a scout that never makes progress.
+test("a job claimed to the attempt limit is skipped and poisoned exactly once", async () => {
+  const dir = freshDir();
+  const queue = createJobQueue({ dir, maxAttempts: 3 });
+
+  await queue.append(request("req_poison", "Northwind Robotics"));
+  await queue.append(request("req_good", "Acme Freight"));
+
+  // Three claims, no completion: the reader took it and died, three times.
+  for (const expected of [1, 2, 3]) {
+    const job = await queue.nextJob();
+    assert.equal(job.requestId, "req_poison");
+    assert.equal(await queue.claimJob("req_poison"), expected, "claimJob reports the attempt");
+  }
+
+  // The fourth read steps over it rather than handing back the same landmine.
+  assert.equal((await queue.nextJob()).requestId, "req_good", "the queue makes progress again");
+
+  const poisoned = readJsonl(join(dir, "poison.jsonl"));
+  assert.equal(poisoned.length, 1, "reported once, never silently dropped and never spammed");
+  assert.equal(poisoned[0].requestId, "req_poison");
+  assert.equal(poisoned[0].attempts, 3);
+
+  // Reading again must not append a second poison line for the same job.
+  await queue.nextJob();
+  assert.equal(readJsonl(join(dir, "poison.jsonl")).length, 1);
+});
+
+test("a job that completes within the attempt limit is never poisoned", async () => {
+  const dir = freshDir();
+  const queue = createJobQueue({ dir, maxAttempts: 3 });
+
+  await queue.append(request("req_retried", "Lumen Freight"));
+
+  // Two failed attempts, then success. The ordinary shape of a flaky dependency.
+  await queue.claimJob("req_retried");
+  await queue.claimJob("req_retried");
+  assert.equal((await queue.nextJob()).requestId, "req_retried");
+  await queue.claimJob("req_retried");
+  await queue.completeJob("req_retried");
+
+  assert.equal(await queue.nextJob(), null);
+  assert.equal(existsSync(join(dir, "poison.jsonl")), false, "a completed job is not poison");
 });
 
 test("queue state survives a restart, because the file is the state", async () => {

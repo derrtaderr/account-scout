@@ -10,6 +10,12 @@ import { join } from "node:path";
 
 export const PENDING_FILE = "pending.jsonl";
 export const COMPLETED_FILE = "completed.jsonl";
+export const CLAIMS_FILE = "claims.jsonl";
+export const POISON_FILE = "poison.jsonl";
+
+/** Attempts before a job is treated as poison. Three is enough for a flaky
+ *  dependency to recover and few enough that a crash loop is caught the same day. */
+export const DEFAULT_MAX_ATTEMPTS = 3;
 
 function readLines(path) {
   if (!existsSync(path)) return [];
@@ -22,22 +28,30 @@ function readLines(path) {
 /**
  * @param {{dir: string, now?: () => Date}} options
  */
-export function createJobQueue({ dir, now = () => new Date() }) {
+export function createJobQueue({ dir, now = () => new Date(), maxAttempts = DEFAULT_MAX_ATTEMPTS }) {
   if (typeof dir !== "string" || dir === "")
     throw new TypeError("createJobQueue needs a jobs directory");
+  if (!Number.isInteger(maxAttempts) || maxAttempts < 1)
+    throw new TypeError("createJobQueue maxAttempts must be a whole number of at least 1");
 
   const pendingPath = join(dir, PENDING_FILE);
   const completedPath = join(dir, COMPLETED_FILE);
+  const claimsPath = join(dir, CLAIMS_FILE);
+  const poisonPath = join(dir, POISON_FILE);
+
+  function appendLine(path, entry) {
+    mkdirSync(dir, { recursive: true });
+    appendFileSync(path, `${JSON.stringify(entry)}\n`, "utf8");
+  }
 
   /** Append one validated ResearchRequest as a single JSONL line. */
   async function append(request) {
-    mkdirSync(dir, { recursive: true });
     const job = {
       requestId: request.requestId,
       enqueuedAt: now().toISOString(),
       request,
     };
-    appendFileSync(pendingPath, `${JSON.stringify(job)}\n`, "utf8");
+    appendLine(pendingPath, job);
     return job;
   }
 
@@ -56,10 +70,48 @@ export function createJobQueue({ dir, now = () => new Date() }) {
    */
   async function nextJob() {
     const done = completedIds();
+
+    const attempts = new Map();
+    for (const claim of readLines(claimsPath))
+      attempts.set(claim.requestId, (attempts.get(claim.requestId) ?? 0) + 1);
+
+    const alreadyPoisoned = new Set(readLines(poisonPath).map((entry) => entry.requestId));
+
     for (const job of readLines(pendingPath)) {
-      if (!done.has(job.requestId)) return job;
+      if (done.has(job.requestId)) continue;
+
+      // THE POISON EXIT. Without it, a job that crashes its reader is handed back
+      // forever: one bad payload stops the queue permanently and the only symptom is
+      // a scout that never makes progress. Reported once to a file a human owns,
+      // never silently dropped, and never re-reported on every subsequent read.
+      const count = attempts.get(job.requestId) ?? 0;
+      if (count >= maxAttempts) {
+        if (!alreadyPoisoned.has(job.requestId)) {
+          appendLine(poisonPath, {
+            requestId: job.requestId,
+            attempts: count,
+            poisonedAt: now().toISOString(),
+          });
+          alreadyPoisoned.add(job.requestId);
+        }
+        continue;
+      }
+
+      return job;
     }
     return null;
+  }
+
+  /**
+   * Record that a reader is about to work this job. The reader calls it BEFORE the
+   * work, not after — a claim written afterwards is never written by the crash it
+   * exists to count.
+   *
+   * @returns {Promise<number>} this job's attempt number
+   */
+  async function claimJob(requestId) {
+    appendLine(claimsPath, { requestId, claimedAt: now().toISOString() });
+    return readLines(claimsPath).filter((claim) => claim.requestId === requestId).length;
   }
 
   /**
@@ -71,14 +123,20 @@ export function createJobQueue({ dir, now = () => new Date() }) {
     if (!pending.some((job) => job.requestId === requestId)) return false;
     if (completedIds().has(requestId)) return false;
 
-    mkdirSync(dir, { recursive: true });
-    appendFileSync(
-      completedPath,
-      `${JSON.stringify({ requestId, completedAt: now().toISOString() })}\n`,
-      "utf8",
-    );
+    appendLine(completedPath, { requestId, completedAt: now().toISOString() });
     return true;
   }
 
-  return { append, nextJob, completeJob, pendingPath, completedPath, dir };
+  return {
+    append,
+    nextJob,
+    claimJob,
+    completeJob,
+    pendingPath,
+    completedPath,
+    claimsPath,
+    poisonPath,
+    maxAttempts,
+    dir,
+  };
 }

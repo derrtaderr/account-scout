@@ -1,0 +1,55 @@
+{
+  "recordedWith": {
+    "mode": "recorded",
+    "note": "Hand-authored synthetic transcript. Two of the four planned queries return no results at all, which is the honest recording of a thin account. The extractor still proposed four candidates; three of them cannot carry evidence and the gate refuses them."
+  },
+  "searches": [
+    {
+      "query": "Acme Freight company overview",
+      "results": [
+        { "url": "https://acmefreight.example/", "title": "Acme Freight" },
+        { "url": "https://directory.example/acme-freight", "title": "Acme Freight — company directory listing" }
+      ]
+    },
+    {
+      "query": "Acme Freight site:acmefreight.example",
+      "results": [{ "url": "https://acmefreight.example/", "title": "Acme Freight" }]
+    },
+    { "query": "Acme Freight what is the pricing model", "results": [] },
+    { "query": "Acme Freight funding news", "results": [] }
+  ],
+  "candidates": [
+    {
+      "text": "Acme Freight moves palletised freight between regional depots in the American Midwest.",
+      "kind": "factual",
+      "citations": [
+        {
+          "url": "https://acmefreight.example/",
+          "quote": "moves palletised freight between regional depots in the American Midwest"
+        }
+      ]
+    },
+    {
+      "_why": "MUST BE REFUSED. The directory says 51-200; the extractor sharpened it into a number nobody published.",
+      "text": "Acme Freight employs roughly 120 people.",
+      "kind": "numeric",
+      "citations": [
+        { "url": "https://directory.example/acme-freight", "quote": "Employees: approximately 120" }
+      ]
+    },
+    {
+      "_why": "MUST BE REFUSED. Cites a page that was never fetched — the search for funding news returned nothing.",
+      "text": "Acme Freight raised a $12 million Series A in 2025.",
+      "kind": "numeric",
+      "citations": [
+        { "url": "https://techpress.example/acme-freight-series-a", "quote": "Acme Freight raised $12 million" }
+      ]
+    },
+    {
+      "_why": "MUST BE REFUSED. No citation. The pricing question found nothing, and an answer got written anyway.",
+      "text": "Acme Freight prices per pallet-mile.",
+      "kind": "factual",
+      "citations": []
+    }
+  ]
+}

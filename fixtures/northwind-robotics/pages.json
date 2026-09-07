@@ -1,0 +1,26 @@
+[
+  {
+    "url": "https://northwindrobotics.com/about",
+    "title": "About — Northwind Robotics",
+    "fetchedAt": "2026-09-07T12:00:00.000Z",
+    "content": "Northwind Robotics builds warehouse automation for mid-market third-party logistics operators. Founded in 2019 in Rotterdam by Ines Aldarov and Petro Vance, the company now supports 41 distribution centres across Europe. Our autonomous pick-and-place cells install alongside existing conveyor lines rather than replacing them, which is why a typical deployment goes live in under six weeks."
+  },
+  {
+    "url": "https://northwindrobotics.com/pricing",
+    "title": "Pricing — Northwind Robotics",
+    "fetchedAt": "2026-09-07T12:00:02.000Z",
+    "content": "Northwind prices per successful pick rather than per robot. Customers pay a fixed platform fee plus a per-pick rate that falls as monthly volume rises. We moved to per-pick pricing in 2024 because buyers told us capital budgets were the thing blocking deployment."
+  },
+  {
+    "url": "https://logisticsweekly.example/northwind-series-b",
+    "title": "Northwind Robotics closes Series B — Logistics Weekly",
+    "fetchedAt": "2026-09-07T12:00:04.000Z",
+    "content": "Northwind Robotics closed a 24 million euro Series B led by Kettle Row Capital, with participation from Harbour Lane Ventures. The round follows a year in which deployments doubled. Investors pointed to the per-pick pricing switch as the change that unlocked mid-market demand."
+  },
+  {
+    "url": "https://podcast.example/northwind-ep-42",
+    "title": "Episode 42: Ines Aldarov of Northwind Robotics",
+    "fetchedAt": "2026-09-07T12:00:06.000Z",
+    "content": "Ines Aldarov: our revenue org is led by Marta Sundqvist, who joined from a freight-forwarding background. Marta rebuilt the commercial team around deployment engineers rather than account executives, because the buyer in this market wants to see the cell running before they sign."
+  }
+]

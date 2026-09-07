@@ -1,0 +1,16 @@
+{
+  "name": "account-scout",
+  "version": "0.1.0",
+  "description": "A GTM account-research agent whose claims must survive. Every claim binds to a citation fetched in the same run; five first-party boundary repos run inside it: webhook-engine on ingress, a deterministic citation gate in the core, gtm-architect read via MCP, gtm-agent-evals deciding autonomy, redaction-gate on egress.",
+  "type": "module",
+  "license": "MIT",
+  "scripts": {
+    "test": "node --test"
+  },
+  "dependencies": {
+    "redaction-gate": "github:derrtaderr/redaction-gate",
+    "webhook-engine": "github:derrtaderr/webhook-engine",
+    "gtm-agent-evals": "github:derrtaderr/gtm-agent-evals",
+    "gtm-architect": "github:derrtaderr/gtm-architect"
+  }
+}

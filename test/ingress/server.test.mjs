@@ -48,7 +48,7 @@ test("a signed delivery over HTTP becomes one job", async (t) => {
   const { server, url } = await listening(dir);
   t.after(() => server.close());
 
-  const rawBody = JSON.stringify({ id: "evt_http_001", accountName: "Northwind Robotics" });
+  const rawBody = JSON.stringify({ requestId: "evt_http_001", accountName: "Northwind Robotics" });
   const timestamp = Math.floor(Date.now() / 1000);
 
   const response = await post(url, rawBody, {
@@ -67,7 +67,7 @@ test("a forged delivery over HTTP is refused with 401 and enqueues nothing", asy
   const { server, url } = await listening(dir);
   t.after(() => server.close());
 
-  const rawBody = JSON.stringify({ id: "evt_http_forged", accountName: "Acme Freight" });
+  const rawBody = JSON.stringify({ requestId: "evt_http_forged", accountName: "Acme Freight" });
   const timestamp = Math.floor(Date.now() / 1000);
 
   const response = await post(url, rawBody, {
@@ -88,7 +88,7 @@ test("the listener preserves the exact bytes the signature covers", async (t) =>
   // Whitespace, a float that JSON.stringify would renormalise, and a non-ASCII
   // character. A listener that reparsed and reserialised this body would change the
   // digest and refuse a genuine delivery.
-  const rawBody = '{  "id": "evt_bytes_001",\n  "accountName": "Lumen Fräight",\n  "score": 1.0 }';
+  const rawBody = '{  "requestId": "evt_bytes_001",\n  "accountName": "Lumen Fräight",\n  "score": 1.0 }';
   const timestamp = Math.floor(Date.now() / 1000);
 
   const response = await post(url, rawBody, {

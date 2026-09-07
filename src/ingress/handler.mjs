@@ -5,7 +5,8 @@
 // exactly one thing on top of it: turn a delivery that survived all of that into a
 // validated ResearchRequest on the job queue.
 
-import { createEngine, DEFAULT_ID_HEADER } from "webhook-engine";
+import { createHash } from "node:crypto";
+import { createEngine } from "webhook-engine";
 import { makeResearchRequest } from "../types.mjs";
 import { createJobQueue } from "./queue.mjs";
 
@@ -48,21 +49,49 @@ function permanent(message) {
 }
 
 /**
- * THE ID COMES FROM THE SIGNED BODY FIRST, AND THE HEADER IS ONLY A FALLBACK.
+ * A verified sender sent something the contract does not allow. Distinct from a
+ * transient handler failure because the answer is a 4xx, not a redelivery: the bytes
+ * are authentic and will fail identically forever, so the sender has to change them.
+ *
+ * The name travels: webhook-engine's error records keep `name`, which is how
+ * handleDelivery recognises the class on the far side of the retry boundary.
+ */
+class SenderContractError extends Error {
+  constructor(message) {
+    super(message);
+    this.name = "SenderContractError";
+    this.retryable = false;
+  }
+}
+
+/**
+ * THE JOB KEY COMES FROM THE SIGNED BODY. THERE IS NO HEADER FALLBACK.
  *
  * The HMAC covers the timestamp and the body. It does not cover `webhook-id`, so an
  * id read from that header is editable in flight by anything that can rewrite
- * headers — a proxy, a sidecar, a compromised load balancer. Preferring the header
- * would let one signed delivery be re-presented under a fresh id and enqueued a
- * second time, which defeats the replay refusal without ever touching the signature.
- * Reading the body first means the idempotency key is covered by the signature
- * whenever the sender puts it there.
+ * headers — a proxy, a sidecar, a compromised load balancer.
+ *
+ * A fallback to the header was not a weaker version of this rule, it was the whole
+ * hole: review demonstrated that ONE captured signature over an id-less body,
+ * re-presented under `webhook-id: A`, `B`, `C`, produced THREE jobs. The signature
+ * never had to be broken. Any middlebox on the path was an unlimited job generator.
+ *
+ * So the sender contract is now explicit and enforced: the signed body MUST carry
+ * `requestId`. We own both ends of this interface, an id inside the HMAC-covered
+ * bytes is unforgeable, and a verified body without one is a contract violation that
+ * is refused by name rather than quietly keyed off something an attacker controls.
  */
-function resolveRequestId(body, headers) {
-  const fromBody = body?.requestId ?? body?.id ?? body?.event_id ?? body?.eventId;
-  if (typeof fromBody === "string" && fromBody.length > 0) return fromBody;
-  const fromHeader = headers.get(DEFAULT_ID_HEADER);
-  return typeof fromHeader === "string" && fromHeader.length > 0 ? fromHeader : null;
+function resolveRequestId(body, headers, rawText) {
+  const fromBody = body?.requestId;
+  if (typeof fromBody === "string" && fromBody.trim() !== "") return fromBody;
+
+  // No requestId in the signed bytes. The delivery is still VERIFIED, so it carries
+  // evidence worth keeping — but there is no sender-supplied key to keep it under,
+  // and reaching for the header here is exactly the hole above. The content hash of
+  // the signed bytes is a key that requires nothing unsigned: deterministic, so the
+  // same bytes always land on the same record, and replay-stable, so a redelivery is
+  // recognisably the duplicate it is.
+  return `sha256:${createHash("sha256").update(rawText, "utf8").digest("hex")}`;
 }
 
 /**
@@ -80,15 +109,20 @@ export function createIngress({ secret, jobsDir = "jobs", queue = createJobQueue
     handler: async (event) => {
       const parseFailure = event.body?.[PARSE_FAILURE];
       if (typeof parseFailure === "string")
-        throw permanent(`body is not valid JSON: ${parseFailure}`);
+        throw new SenderContractError(`body is not valid JSON: ${parseFailure}`);
 
-      // The requestId IS the delivery id, so a replay of the same event resolves to
-      // the same idempotency key and cannot produce a second job.
+      // The sender contract, enforced. Never event.id here: for a body with no
+      // requestId that value is the content hash, and substituting it would invent
+      // the key the sender failed to supply instead of refusing the delivery.
+      const requestId = event.body?.requestId;
+      if (typeof requestId !== "string" || requestId.trim() === "")
+        throw new SenderContractError("the signed body must carry requestId");
+
       let request;
       try {
-        request = makeResearchRequest({ ...event.body, requestId: event.id });
+        request = makeResearchRequest({ ...event.body, requestId });
       } catch (error) {
-        throw permanent(`not a research request: ${error.message}`);
+        throw new SenderContractError(`not a research request: ${error.message}`);
       }
 
       const job = await queue.append(request);
@@ -147,5 +181,18 @@ export function createIngress({ secret, jobsDir = "jobs", queue = createJobQueue
  * @param {{engine: object}} deps
  */
 export async function handleDelivery(rawBody, headers, deps) {
-  return deps.engine.receive({ rawBody, headers });
+  const result = await deps.engine.receive({ rawBody, headers });
+
+  // webhook-engine answers 200 for a dead lettered event, and its reasoning is
+  // right for the case it was written about: the record is durable, so asking the
+  // provider to redeliver would burn its retry budget for a copy already safely
+  // stored. A sender-contract violation is the other case. The bytes are authentic
+  // and permanently wrong, so the sender — not a retry — has to change them, and a
+  // 4xx is the only answer that says so. It is terminal at every provider, so it
+  // does not reintroduce the redelivery storm the 200 exists to prevent.
+  if (result.outcome === "dead_lettered" && result.errors?.[0]?.name === "SenderContractError") {
+    return { ...result, status: 400, reason: result.errors[0].message };
+  }
+
+  return result;
 }

@@ -9,6 +9,7 @@ import assert from "node:assert/strict";
 import { mkdtempSync, readFileSync, existsSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { createHash } from "node:crypto";
 import { signHeader } from "webhook-engine";
 
 import { createIngress } from "../../src/ingress/handler.mjs";
@@ -32,6 +33,11 @@ function signedDelivery(body, { secret = SECRET, timestamp = Math.floor(Date.now
   };
 }
 
+/** The DLQ key for a verified delivery whose body carries no requestId. */
+function hashKey(rawBody) {
+  return `sha256:${createHash("sha256").update(rawBody, "utf8").digest("hex")}`;
+}
+
 function readJobs(dir) {
   const path = join(dir, "pending.jsonl");
   if (!existsSync(path)) return [];
@@ -46,7 +52,7 @@ test("a verified delivery becomes exactly one JSONL job carrying the request", a
   const ingress = createIngress({ secret: SECRET, jobsDir: dir });
 
   const { rawBody, headers } = signedDelivery({
-    id: "evt_northwind_001",
+    requestId: "evt_northwind_001",
     accountName: "Northwind Robotics",
     domain: "northwind.example",
     questions: ["who owns revenue operations?"],
@@ -72,7 +78,7 @@ test("a delivery signed with the wrong secret is refused and enqueues nothing", 
 
   // Signed with a different synthetic key, which is what an attacker has.
   const { rawBody, headers } = signedDelivery(
-    { id: "evt_forged_001", accountName: "Acme Freight" },
+    { requestId: "evt_forged_001", accountName: "Acme Freight" },
     { secret: "whsec_synthetic_wrong_key" },
   );
 
@@ -98,7 +104,7 @@ test("the same bytes that were refused are accepted by the intake holding the ma
   const forgedKey = "whsec_synthetic_wrong_key";
 
   const { rawBody, headers } = signedDelivery(
-    { id: "evt_forged_001", accountName: "Acme Freight" },
+    { requestId: "evt_forged_001", accountName: "Acme Freight" },
     { secret: forgedKey },
   );
 
@@ -120,7 +126,7 @@ test("a replayed delivery is refused as a duplicate and enqueues exactly one job
   // The identical bytes, delivered twice. This is not an edge case: every provider
   // redelivers when its 200 is lost on the way back.
   const { rawBody, headers } = signedDelivery({
-    id: "evt_replay_001",
+    requestId: "evt_replay_001",
     accountName: "Lumen Freight",
   });
 
@@ -142,7 +148,7 @@ test("a delivery replayed outside the timestamp window is refused and enqueues n
   // signed payload, so an attacker cannot freshen it without the key.
   const stale = Math.floor(Date.now() / 1000) - 3600;
   const { rawBody, headers } = signedDelivery(
-    { id: "evt_stale_001", accountName: "Northwind Robotics" },
+    { requestId: "evt_stale_001", accountName: "Northwind Robotics" },
     { timestamp: stale },
   );
 
@@ -161,8 +167,8 @@ test("a verified delivery whose body is not JSON is dead lettered with the reaso
   // Genuinely from the provider — the signature is valid over these bytes. The bytes
   // just are not JSON. A verified sender's broken payload is worth keeping, which is
   // what separates it from the forged delivery above.
-  const { rawBody, headers } = signedDelivery("{not json at all");
-  headers["webhook-id"] = "evt_broken_001";
+  const rawBody = "{not json at all";
+  const { headers } = signedDelivery(rawBody);
 
   const result = await ingress.handleDelivery(rawBody, headers);
 
@@ -171,7 +177,9 @@ test("a verified delivery whose body is not JSON is dead lettered with the reaso
 
   const records = await ingress.dlq.list();
   assert.equal(records.length, 1);
-  assert.equal(records[0].eventId, "evt_broken_001");
+  // Keyed by the content hash of the signed bytes: an unparsable body has no
+  // requestId to be keyed by, and the header is not allowed to supply one.
+  assert.equal(records[0].eventId, hashKey(rawBody));
   assert.match(records[0].errors[0].message, /JSON/i, "the refusal names what was wrong");
 
   // Parsing the same bytes a second time produces the same failure, so retrying is
@@ -185,7 +193,7 @@ test("a verified delivery that fails makeResearchRequest is dead lettered with t
 
   // Valid JSON, correctly signed, and still not a research request: no accountName.
   const { rawBody, headers } = signedDelivery({
-    id: "evt_no_account_001",
+    requestId: "evt_no_account_001",
     domain: "northwind.example",
   });
 
@@ -199,6 +207,43 @@ test("a verified delivery that fails makeResearchRequest is dead lettered with t
   assert.equal(records[0].eventId, "evt_no_account_001");
   assert.match(records[0].errors[0].message, /accountName/);
   assert.equal(records[0].attempts, 1);
+});
+
+// F1, the reviewer's demonstrated blocker. The sender contract is decided: the SIGNED
+// body must carry requestId. It is inside the HMAC-covered bytes and therefore
+// unforgeable, where webhook-id is editable by any middlebox on the path.
+test("one signed id-less body replayed under three header ids yields zero jobs", async () => {
+  const dir = freshDir();
+  const ingress = createIngress({ secret: SECRET, jobsDir: dir });
+
+  // ONE signature over ONE body that carries no requestId. The attacker cannot alter
+  // the bytes, but they can rewrite the header freely — so if the header ever decided
+  // the job key, this one capture would become an unlimited job generator.
+  const { rawBody, headers } = signedDelivery({ accountName: "Northwind Robotics" });
+
+  const statuses = [];
+  for (const forgedId of ["A", "B", "C"]) {
+    const result = await ingress.handleDelivery(rawBody, { ...headers, "webhook-id": forgedId });
+    statuses.push(result.status);
+  }
+
+  assert.deepEqual(statuses, [400, 400, 400], "each delivery is refused, naming the contract");
+  assert.equal(readJobs(dir).length, 0, "three header ids, zero jobs");
+});
+
+test("a verified body with no requestId is refused naming the sender contract", async () => {
+  const dir = freshDir();
+  const ingress = createIngress({ secret: SECRET, jobsDir: dir });
+
+  const { rawBody, headers } = signedDelivery({ accountName: "Acme Freight" });
+  const result = await ingress.handleDelivery(rawBody, headers);
+
+  assert.equal(result.status, 400);
+  assert.equal(readJobs(dir).length, 0);
+
+  const records = await ingress.dlq.list();
+  assert.equal(records.length, 1, "verified traffic has evidence value, so it is kept");
+  assert.match(records[0].errors[0].message, /signed body must carry requestId/);
 });
 
 test("enqueueLocal skips HTTP but not validation", async () => {

@@ -141,6 +141,89 @@ test("a write that trips the gate is REFUSED and the report lands nowhere", asyn
   assert.deepEqual(readdirSync(dir), [], "nothing else landed either");
 });
 
+// --- emitSummary -------------------------------------------------------------
+
+test("emitSummary writes one guarded line and redacts a rostered account name", async () => {
+  const written = [];
+  const out = { write: (s) => written.push(s) };
+  const egress = createEgress({ roster: ROSTER, allowDomains: ["northwind.example"], out });
+
+  const clean = syntheticReport();
+  await egress.emitSummary(clean);
+  assert.equal(written.length, 1);
+  assert.match(written[0], /^account-scout: Northwind Robotics — 1 claim\(s\), 0 refusal\(s\), 1 hop\(s\) \[recorded\]\n$/);
+
+  // A report about the operator's own sensitive client: the name is redacted
+  // on the way out, the line still ships as a working summary.
+  const sensitive = makeResearchReport2("Meridian Dynamics");
+  await egress.emitSummary(sensitive);
+  assert.equal(written.length, 2);
+  assert.match(written[1], /\[client\]/);
+  assert.ok(!written[1].includes("Meridian Dynamics"));
+});
+
+test("a summary the gate cannot clean is refused and nothing reaches the stream", async () => {
+  const written = [];
+  const out = { write: (s) => written.push(s) };
+  const egress = createEgress({ roster: ROSTER, out });
+
+  // The account name in a survivor form the redactor cannot match.
+  const report = makeResearchReport2("meridian_dynamics");
+  await assert.rejects(() => egress.emitSummary(report), { name: "RedactionRefusal" });
+  assert.deepEqual(written, [], "the refused summary never touched the stream");
+});
+
+/** A minimal report whose account name is attacker/operator-chosen. */
+function makeResearchReport2(accountName) {
+  const hop = makeHop({
+    url: "https://third-party.example/coverage",
+    title: "Coverage",
+    fetchedAt: "2026-09-07T12:00:00.000Z",
+    content: "A synthetic page about a synthetic company, long enough to quote.",
+  });
+  return buildResearchReport({
+    request: makeResearchRequest({ accountName, requestId: "req-egress-2" }),
+    hops: [hop],
+    claims: [],
+    refusals: [],
+    meta: { mode: "recorded" },
+    generatedAt: "2026-09-07T12:00:05.000Z",
+  });
+}
+
+// --- replyWriter -------------------------------------------------------------
+
+test("the reply writer hands the server a guarded sender — bodies go out redacted", async () => {
+  const sent = [];
+  const egress = createEgress({ roster: ROSTER });
+  const send = egress.makeReplyWriter((payload) => {
+    sent.push(payload);
+    return "sent";
+  });
+
+  const result = await send({
+    url: "https://caller.example/hook",
+    body: "Research complete for Meridian Dynamics: 3 claims survived.",
+  });
+  assert.equal(result, "sent");
+  assert.equal(sent.length, 1);
+  assert.equal(sent[0].url, "https://caller.example/hook");
+  assert.match(sent[0].body, /\[client\]/);
+  assert.ok(!sent[0].body.includes("Meridian Dynamics"));
+});
+
+test("a reply the gate cannot clean is refused before the sender is invoked", async () => {
+  const sent = [];
+  const egress = createEgress({ roster: ROSTER });
+  const send = egress.makeReplyWriter((payload) => sent.push(payload));
+
+  await assert.rejects(
+    () => send({ url: "https://caller.example/hook", body: "status update re meridian_dynamics onboarding" }),
+    { name: "RedactionRefusal" },
+  );
+  assert.deepEqual(sent, [], "the refused reply never reached the sender");
+});
+
 test("serializeReport includes every surface a leak could ride: claims, refusals, hop content", () => {
   const report = syntheticReport({ refusalText: "An uncited would-be claim." });
   const text = serializeReport(report);

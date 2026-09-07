@@ -14,6 +14,8 @@
 // I/O and the exit boundary injected is what makes every command testable
 // without a port, a key, or a real process.
 
+import { generateDashboard } from "gtm-agent-evals/dist/index.js";
+
 import { runScout } from "../scout/run.mjs";
 import { processReport } from "../gates/pipeline.mjs";
 import { createEgress } from "../gates/egress.mjs";
@@ -22,6 +24,8 @@ import { liveProvider } from "../scout/provider-live.mjs";
 import { briefFromKernel } from "../kernel/brief.mjs";
 import { makeResearchRequest } from "../types.mjs";
 import { ScoutRefusal } from "../scout/errors.mjs";
+import { RESEARCH_CONFIG_ID, TELEMETRY_PATH } from "../gates/evals.mjs";
+import { DEFAULT_GATE_N } from "../gates/autonomy.mjs";
 import { UsageError } from "./args.mjs";
 
 export const EXIT = Object.freeze({
@@ -119,6 +123,32 @@ export async function runCommand(opts, deps) {
       return EXIT.REFUSED;
     }
     stderr.write(`unexpected error: ${err?.message ?? err}\n`);
+    return EXIT.DEFECT;
+  }
+}
+
+/**
+ * `scout report` — render the static evals dashboard over the scout's own
+ * telemetry. The gate line is drawn at the scout's own autonomy N, so the
+ * picture the dashboard shows is the picture the autonomy gate acts on, not the
+ * library's default. A missing telemetry file renders an honest empty
+ * dashboard, never a crash — the library reads it as zero events.
+ *
+ * @param {object} opts a parsed `report` options object
+ * @param {object} deps { stdout, stderr }
+ * @returns {Promise<number>} an EXIT code
+ */
+export async function reportCommand(opts, deps) {
+  const { stdout, stderr } = deps;
+  try {
+    const telemetryPath = opts.telemetry ?? TELEMETRY_PATH;
+    const written = generateDashboard(telemetryPath, opts.out, undefined, {
+      gateNByConfig: { [RESEARCH_CONFIG_ID]: DEFAULT_GATE_N },
+    });
+    stdout.write(`dashboard written to ${written}\n`);
+    return EXIT.DELIVERED;
+  } catch (err) {
+    stderr.write(`could not generate the dashboard: ${err?.message ?? err}\n`);
     return EXIT.DEFECT;
   }
 }

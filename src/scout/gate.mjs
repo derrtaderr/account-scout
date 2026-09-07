@@ -113,7 +113,7 @@ export function gateCandidates({ candidates, hops, domain, runAt }) {
     try {
       citations = rawCitations.map((raw) => normalizeCitation(raw, hops, runAt));
     } catch (err) {
-      refuse(`citation is malformed and cannot be checked: ${err.message}`);
+      refuse(`citation rejected by the contract, so it cannot be checked: ${err.message}`);
       return;
     }
 

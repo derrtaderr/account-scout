@@ -30,11 +30,11 @@ const ANTHROPIC_VERSION = "2023-06-01";
 
 export const DEFAULT_MODEL = "claude-opus-5";
 
-// Pinned by the lane dispatch. NOTE for the orchestrator: web_search_20260209
-// is the current variant for Opus-5-class models and adds dynamic filtering;
-// this default is the basic variant the dispatch named, and ANTHROPIC_WEB_SEARCH_TOOL
-// overrides it without a code change.
-export const DEFAULT_WEB_SEARCH_TOOL = "web_search_20250305";
+// The current variant for Opus-5-class models (dynamic filtering), ratified by
+// the orchestrator in fix wave 1. Older models need the basic variant
+// web_search_20250305, and on Vertex only the basic variant exists — set
+// ANTHROPIC_WEB_SEARCH_TOOL for either case, no code change needed.
+export const DEFAULT_WEB_SEARCH_TOOL = "web_search_20260209";
 
 const MAX_SEARCH_USES = 4;
 const MAX_PAGE_CHARS = 40_000;

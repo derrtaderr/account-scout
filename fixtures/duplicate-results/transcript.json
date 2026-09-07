@@ -1,0 +1,12 @@
+{
+  "searches": [
+    {
+      "query": "Northwind Robotics company overview",
+      "results": [
+        { "url": "https://northwindrobotics.com/about", "title": "About — Northwind Robotics" },
+        { "url": "https://northwindrobotics.com/about", "title": "About (duplicate row)" }
+      ]
+    }
+  ],
+  "candidates": []
+}

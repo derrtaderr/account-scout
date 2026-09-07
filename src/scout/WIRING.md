@@ -41,12 +41,19 @@ from a thorough one that found less.
 
 ```js
 class ScoutRefusal extends Error   // .name === "ScoutRefusal"
+scrubText(text, secrets[]) => string
+scrubError(err, secrets[]) => Error   // safe-to-print clone; use for EVERY cause
 ```
 
 The refusal/defect boundary. `ScoutRefusal` is the design working; any other
 error escaping this package is a bug. **Lane E**: map `ScoutRefusal` to a
 distinct non-zero exit code, not to the crash code. **Lane D**: report it,
 never swallow it.
+
+**If you attach a cause, scrub it.** Never `{ cause: err }` where `err` came
+from a call that saw a credential — use `{ cause: scrubError(err, [secret]) }`.
+`runScout` wraps provider errors without knowing any secrets, so a custom
+provider must not let a raw secret-bearing error escape it in the first place.
 
 ### `src/scout/planner.mjs`
 
@@ -94,7 +101,7 @@ missing or malformed.
 ```js
 liveProvider(env?, { fetchImpl? }?) => Provider   // mode "live", model set
 DEFAULT_MODEL             // "claude-opus-5"
-DEFAULT_WEB_SEARCH_TOOL   // "web_search_20250305"
+DEFAULT_WEB_SEARCH_TOOL   // "web_search_20260209"
 ```
 
 `env` defaults to `process.env`; `fetchImpl` defaults to `globalThis.fetch` and
@@ -106,12 +113,12 @@ Environment:
 |---|---|---|
 | `ANTHROPIC_API_KEY` | yes | — refuses at construction, naming the variable |
 | `ANTHROPIC_MODEL` | no | `claude-opus-5` |
-| `ANTHROPIC_WEB_SEARCH_TOOL` | no | `web_search_20250305` |
+| `ANTHROPIC_WEB_SEARCH_TOOL` | no | `web_search_20260209` |
 
-> **Flagged for the orchestrator, not decided here.** `web_search_20250305` is
-> the basic web-search variant; `web_search_20260209` (dynamic filtering) is the
-> current one for Opus-5-class models. The lane dispatch named `20250305`, so
-> that is the pinned default, and the env var switches it with no code change.
+> **Ratified in fix wave 1.** The default is `web_search_20260209`, the current
+> variant for Opus-5-class models. Models older than Opus 4.6 / Sonnet 4.6 need
+> the basic `web_search_20250305`, and on Vertex AI only the basic variant
+> exists — set `ANTHROPIC_WEB_SEARCH_TOOL` for either case, no code change.
 
 ## The provider interface
 
@@ -165,11 +172,23 @@ Three violations are **decidable**, so three violations refuse:
 | Violation | Refusal reason |
 |---|---|
 | zero citations | `claim carries no citation — an uncited claim is a refusal, not a claim` |
+| quote below the evidential floor | `quote is below the evidential floor (N chars trimmed, minimum 20)` |
 | quote absent from fetched content | `quote does not appear in the fetched content of <url> — quote was: "..."` |
 | URL never fetched this run | `citation url was never fetched this run: <url> — quote was: "..."` |
 
-Plus two shape refusals: an unrecognized `kind`, and a citation malformed enough
-that the contract will not construct it.
+Plus two shape refusals: an unrecognized `kind`, and a citation the contract
+refuses to construct at all.
+
+**The evidential floor (`MIN_QUOTE_LENGTH`, 20 trimmed characters).** Without
+it the check is vacuously satisfiable: the quote `"The"`, or a single space,
+appears in almost any fetched page, so a fabricated claim wearing a trivial
+quote is deterministically *blessed*. The composed attack is real — a hostile
+fetched page prompt-injects the extractor, the extractor emits fabrications
+carrying trivial quotes, and the gate signs each one. The floor is enforced in
+two places on purpose: `makeCitation` rejects at construction, and
+`validateCitationAgainstHops` re-checks defensively (before the hop lookup) so a
+citation object built by hand cannot bypass it. `fixtures/hostile-injection/`
+fails loudly if either is ever weakened.
 
 Everything else — is this source credible, does this evidence really support
 this claim — is **judgment**, and belongs to the gtm-agent-evals research rubric
@@ -232,12 +251,22 @@ Recorder rules, each one load-bearing:
 5. Keys named in `_why` are ignored by the loader and are there to say why a bad
    candidate is in the store on purpose.
 
-Two stores ship today, and they are the two shapes worth testing:
+Four stores ship today.
+
+**Read the numbers with their invocation.** These counts hold when the run is
+driven by the fixture's OWN `account.json` — same name, same domain, same
+questions — because the planner derives its queries from all three and the
+recorded searches are keyed on the exact query strings. Drive the same fixture
+from a different request and you get different (usually zero) hops, which is
+correct behaviour and not a regression. Omitting this caused a false alarm
+upstream.
 
 | Fixture | Shape | Hops | Claims | Refusals |
 |---|---|---|---|---|
 | `northwind-robotics` | rich — all three kinds, both tiers, three planted failures | 4 | 4 | 3 |
 | `acme-freight` | sparse — two thin pages, two searches that found nothing | 2 | 1 | 3 |
+| `hostile-injection` | security — one prompt-injecting page, three trivial-quote candidates | 1 | **0** | 3 |
+| `duplicate-results` | regression — one search recording the same URL twice | 1 | 0 | 0 |
 
 ## Live mode: why search does not supply the content
 
@@ -253,8 +282,15 @@ Consequences to know:
 
 - The Anthropic key goes to `api.anthropic.com` and nowhere else. Third-party
   page fetches carry no Anthropic headers, and there is a test for that.
-- Every error this provider raises is scrubbed of the key first, because
-  upstream error bodies have been known to echo credentials back.
+- Every error this provider raises is scrubbed of the key — **message and cause
+  chain both**. Scrubbing only the message was not enough: `{ cause: err }`
+  attaches the original error, and `util.inspect` / `console.error` print the
+  whole chain, which is exactly what this package asks Lanes D and E to do. Raw
+  errors are never attached; `scrubError(err, [secret])` from `errors.mjs`
+  returns a clone with the message scrubbed, the nested cause chain walked,
+  cycles terminated, and the stack dropped. That last one matters because V8's
+  own `JSON.parse` SyntaxError quotes the offending source text, so a key inside
+  a malformed body lands in the message of an error nobody wrote.
 - Server-tool failures arrive as **HTTP 200** with an error *object* where a
   success carries an *array*. The code branches on that before indexing; anyone
   extending it must keep doing so.

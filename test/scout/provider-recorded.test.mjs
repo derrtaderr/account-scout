@@ -100,6 +100,12 @@ test("the sparse fixture records searches that genuinely found nothing", async (
   assert.equal((await provider.proposeClaims({ hops: [] })).length, 4);
 });
 
+test("a search whose recorded results repeat a URL yields it once", async () => {
+  const provider = recordedProvider(fixture("duplicate-results"));
+  const results = await provider.search("Northwind Robotics company overview");
+  assert.equal(results.length, 1, "a duplicated fixture URL must not become two hops");
+});
+
 test("replay is deterministic — two runs of the same fixture agree exactly", async () => {
   const a = await recordedProvider(NORTHWIND).search("Northwind Robotics company overview");
   const b = await recordedProvider(NORTHWIND).search("Northwind Robotics company overview");

@@ -135,15 +135,15 @@ test("search posts to the Messages API with the server-side web-search tool", as
   const body = JSON.parse(call.init.body);
   assert.equal(body.model, DEFAULT_MODEL);
   assert.equal(body.tools[0].type, DEFAULT_WEB_SEARCH_TOOL);
-  assert.equal(DEFAULT_WEB_SEARCH_TOOL, "web_search_20250305");
+  assert.equal(DEFAULT_WEB_SEARCH_TOOL, "web_search_20260209");
   assert.equal(body.tools[0].name, "web_search");
   assert.match(JSON.stringify(body.messages), /Northwind Robotics company overview/);
 });
 
 test("the web-search tool version is overridable from the environment", async () => {
   const impl = fakeFetch(() => jsonResponse(searchBody([])));
-  await liveProvider(env({ ANTHROPIC_WEB_SEARCH_TOOL: "web_search_20260209" }), { fetchImpl: impl }).search("x");
-  assert.equal(JSON.parse(impl.calls[0].init.body).tools[0].type, "web_search_20260209");
+  await liveProvider(env({ ANTHROPIC_WEB_SEARCH_TOOL: "web_search_20250305" }), { fetchImpl: impl }).search("x");
+  assert.equal(JSON.parse(impl.calls[0].init.body).tools[0].type, "web_search_20250305");
 });
 
 // ---- parsing ----

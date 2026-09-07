@@ -70,7 +70,18 @@ export function recordedProvider(fixtureDir) {
      *  miss; the runner's early stop reads it the same way a live empty page
      *  of results would read. */
     async search(query) {
-      return (byQuery.get(query) ?? []).map((r) => Object.freeze({ url: r.url, title: r.title }));
+      // Dedupe within one result list, exactly as the live provider does. A
+      // recorder that logged the same URL twice must not be able to turn one
+      // page into two hops — that would inflate the hop trail with evidence
+      // that was only ever fetched once.
+      const seen = new Set();
+      const results = [];
+      for (const r of byQuery.get(query) ?? []) {
+        if (!r?.url || seen.has(r.url)) continue;
+        seen.add(r.url);
+        results.push(Object.freeze({ url: r.url, title: r.title }));
+      }
+      return results;
     },
 
     async fetchPage(url) {

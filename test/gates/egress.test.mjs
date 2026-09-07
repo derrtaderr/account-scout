@@ -230,3 +230,27 @@ test("serializeReport includes every surface a leak could ride: claims, refusals
   assert.match(text, /An uncited would-be claim\./);
   assert.match(text, /warehouse automation for mid-market logistics operators/);
 });
+
+// --- key hygiene, house style ------------------------------------------------
+// The refusal object itself crosses a boundary (Sentry, a CI transcript, an
+// operator's console). Assert on util.inspect at depth 10 — what an operator
+// actually sees — not on err.message alone. Matches test/scout/key-hygiene.
+
+test("the inspected refusal, depth 10, carries zero occurrences of the caught key", async () => {
+  const util = await import("node:util");
+  const dir = tempDir();
+  const path = join(dir, "northwind.md");
+  const egress = createEgress({ roster: ROSTER, allowDomains: ["northwind.example"] });
+
+  const fakeKey = "sk-ant-synth etic00000000000000000000"; // survivor form
+  const report = syntheticReport({ quote: `A hostile page echoed a credential: ${fakeKey} inside its body text.` });
+
+  let refusal;
+  await assert.rejects(
+    () => egress.writeReport(report, path),
+    (err) => ((refusal = err), err.name === "RedactionRefusal"),
+  );
+  const inspected = util.inspect(refusal, { depth: 10 });
+  assert.equal(inspected.split("etic00000000000000000000").length - 1, 0, "the key value appears nowhere in the inspected refusal");
+  assert.ok(!existsSync(path));
+});

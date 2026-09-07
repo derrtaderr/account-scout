@@ -16,6 +16,7 @@ import { makeResearchRequest, makeHop, makeCitation, makeClaim, makeResearchRepo
 import { buildResearchReport } from "../../src/report/build.mjs";
 import { createEgress } from "../../src/gates/egress.mjs";
 import { RESEARCH_CONFIG_ID } from "../../src/gates/evals.mjs";
+import { allowUnattended } from "../../src/gates/autonomy.mjs";
 import { processReport, processUnattended } from "../../src/gates/pipeline.mjs";
 
 const ROSTER = [{ class: "client", match: ["Meridian Dynamics"] }];
@@ -126,6 +127,33 @@ test("an egress refusal returns a structured result naming what refused — tele
   assert.equal(readEvents(deps.telemetryPath).length, 1, "the verdict stayed on the record");
   assert.ok(!existsSync(deps.reportPath), "the refused report landed nowhere");
   assert.deepEqual(readdirSync(dir).filter((f) => f.endsWith(".md")), []);
+});
+
+test("REVIEWER SCENARIO: three egress-refused runs earn nothing — streak 0, three BLOCKs naming egress", async () => {
+  const { deps } = makeDeps();
+  const poisoned = cleanReport({
+    quote: "Ticket filed under meridian_dynamics covers the rollout in detail.",
+  });
+
+  for (let i = 1; i <= 3; i++) {
+    const result = await processReport(poisoned, { ...deps, runId: `run-refused-${i}` });
+    assert.equal(result.status, "refused");
+    assert.equal(result.refusedBy, "egress");
+  }
+
+  const events = readEvents(deps.telemetryPath);
+  assert.equal(events.length, 3, "every caught leak is on the record");
+  for (const e of events) {
+    assert.equal(e.verdict.status, "BLOCK", "a run that shipped nothing must never record PASS");
+    assert.ok(
+      e.verdict.reasons.some((r) => r.startsWith("egress refused:")),
+      `the event names egress, got ${JSON.stringify(e.verdict.reasons)}`,
+    );
+  }
+
+  const decision = allowUnattended(RESEARCH_CONFIG_ID, { telemetryPath: deps.telemetryPath, gateN: 3 });
+  assert.equal(decision.allowed, false, "three caught leaks must not earn unattended mode");
+  assert.equal(decision.streak, 0);
 });
 
 // --- the unattended path -----------------------------------------------------

@@ -53,23 +53,52 @@ export async function processReport(report, deps) {
   if (!egress || !reportPath) {
     throw new Error("processReport needs deps.egress and deps.reportPath — refusing to guess where a report lands");
   }
+  if (!reportPath.endsWith(".md")) {
+    // A quarantined report renames .md -> .blocked.md; any other extension would
+    // silently wear the delivered name. Refused at the door rather than guessed.
+    throw new Error(`processReport needs a reportPath ending in .md, got ${reportPath}`);
+  }
 
   const verdict = await evaluateReport(report);
-  const event = await recordVerdict({ verdict, runId, configId, telemetryPath, now });
 
   const blocked = verdict.status === "BLOCK";
   const destination = blocked ? reportPath.replace(/\.md$/, ".blocked.md") : reportPath;
 
+  // Telemetry is recorded AFTER the write attempt, with a delivery-aware status.
+  // The streak's promise is "clean, delivered runs" — a run whose report tripped
+  // the egress gate shipped nothing and must never count as PASS, or three
+  // caught leaks in a row would earn unattended mode (found by review, live).
+  let egressRefusal = null;
   try {
     await egress.writeReport(report, destination);
   } catch (err) {
     if (err?.name !== "RedactionRefusal") throw err; // a defect, not a refusal
+    egressRefusal = err;
+  }
+
+  const recordedVerdict = egressRefusal
+    ? Object.freeze({
+        status: "BLOCK",
+        violations: verdict.violations,
+        reasons: Object.freeze([
+          `egress refused: ${String(egressRefusal.message).split("\n")[0]}`,
+          ...verdict.reasons,
+        ]),
+      })
+    : verdict;
+  const event = await recordVerdict({
+    verdict: recordedVerdict,
+    runId, configId, telemetryPath, now,
+    redactText: egress.redactText,
+  });
+
+  if (egressRefusal) {
     return {
       status: "refused",
       refusedBy: "egress",
       verdict,
       event,
-      reason: err.message,
+      reason: egressRefusal.message,
     };
   }
 

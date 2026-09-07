@@ -96,9 +96,41 @@ export function createIngress({ secret, jobsDir = "jobs", queue = createJobQueue
     },
   });
 
+  /**
+   * The local path. No socket and no signature — there is no remote sender to
+   * authenticate — but the request contract and the idempotency key still apply.
+   * A convenience door that skipped validation would be the one place a malformed
+   * request could reach the scout, which is the whole thing this lane refuses.
+   *
+   * Unlike the webhook path, a refusal throws rather than dead lettering: the
+   * caller is a person at a terminal who can read the message and fix the input.
+   *
+   * @param {object} input accountName, optional domain, optional questions, requestId
+   */
+  async function enqueueLocal(input) {
+    const request = makeResearchRequest(input);
+
+    const claim = await engine.store.reserve(request.requestId);
+    if (claim.state === "done") return claim.result;
+    if (claim.state === "in_flight")
+      throw new Error(`requestId ${request.requestId} is already being enqueued`);
+
+    try {
+      const job = await queue.append(request);
+      await engine.store.complete(request.requestId, job);
+      return job;
+    } catch (error) {
+      // The key must not outlive a failed append, or a retry of a transient disk
+      // error comes back as a duplicate and the request is lost.
+      await engine.store.release(request.requestId);
+      throw error;
+    }
+  }
+
   const deps = { engine, queue };
   return {
     handleDelivery: (rawBody, headers) => handleDelivery(rawBody, headers, deps),
+    enqueueLocal,
     engine,
     queue,
     store: engine.store,

@@ -200,3 +200,43 @@ test("a verified delivery that fails makeResearchRequest is dead lettered with t
   assert.match(records[0].errors[0].message, /accountName/);
   assert.equal(records[0].attempts, 1);
 });
+
+test("enqueueLocal skips HTTP but not validation", async () => {
+  const dir = freshDir();
+  const ingress = createIngress({ secret: SECRET, jobsDir: dir });
+
+  const job = await ingress.enqueueLocal({
+    accountName: "Northwind Robotics",
+    domain: "northwind.example",
+    requestId: "local_001",
+  });
+
+  assert.equal(job.requestId, "local_001");
+  assert.equal(readJobs(dir).length, 1);
+  assert.equal(readJobs(dir)[0].request.accountName, "Northwind Robotics");
+});
+
+test("a malformed local request is refused exactly as a malformed delivery is", async () => {
+  const dir = freshDir();
+  const ingress = createIngress({ secret: SECRET, jobsDir: dir });
+
+  // No accountName. The local path has no signature to check, which is precisely why
+  // it must not become the door that skips the request contract too.
+  await assert.rejects(
+    () => ingress.enqueueLocal({ domain: "northwind.example", requestId: "local_bad" }),
+    /accountName/,
+  );
+
+  assert.equal(readJobs(dir).length, 0, "a refused local request never becomes a job");
+});
+
+test("enqueueLocal is idempotent on requestId, so a rerun does not double-enqueue", async () => {
+  const dir = freshDir();
+  const ingress = createIngress({ secret: SECRET, jobsDir: dir });
+
+  const request = { accountName: "Acme Freight", requestId: "local_rerun" };
+  await ingress.enqueueLocal(request);
+  await ingress.enqueueLocal(request);
+
+  assert.equal(readJobs(dir).length, 1, "the requestId is the idempotency key on both paths");
+});

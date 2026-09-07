@@ -225,6 +225,39 @@ export async function openKernel({
       const result = await request("tools/list", {});
       return result?.tools ?? [];
     },
+
+    /**
+     * Call one read surface and return the kernel's own gtm-json/1 envelope.
+     *
+     * An envelope with `ok: false` is a RESULT, not an error. The kernel exits
+     * non-zero on a refusal and still prints the envelope carrying it, and that
+     * refusal is the answer — the words in `problems` are exactly what the brief
+     * has to pass through. Throwing here would destroy them.
+     *
+     * What DOES throw is the transport failing underneath: no content, or text
+     * that is not the envelope this server promises.
+     */
+    async callTool(name, args = {}) {
+      const result = await request("tools/call", { name, arguments: args });
+      const text = result?.content?.[0]?.text;
+      if (typeof text !== "string")
+        throw new KernelRefusal(
+          `the kernel returned no readable content for "${name}" — expected the gtm-json/1 ` +
+            `envelope this server promises, got ${JSON.stringify(result)}`,
+        );
+      let envelope;
+      try {
+        envelope = JSON.parse(text);
+      } catch (err) {
+        throw new KernelRefusal(
+          `the kernel's answer for "${name}" is not the gtm-json/1 envelope it promises. ` +
+            `it said: ${truncate(text)}`,
+          { cause: err },
+        );
+      }
+      return envelope;
+    },
+
     close,
   };
 }

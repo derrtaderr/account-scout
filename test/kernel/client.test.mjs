@@ -40,3 +40,37 @@ test("the client lists the read surfaces the real server actually exposes", asyn
     await kernel.close();
   }
 });
+
+test("a read surface comes back as the kernel's own gtm-json/1 envelope", async () => {
+  const kernel = await openKernel({ projectDir: PROJECT_DIR });
+  try {
+    const envelope = await kernel.callTool("gtm_status");
+
+    assert.equal(envelope.schema, "gtm-json/1");
+    assert.equal(envelope.ok, true);
+    assert.equal(envelope.command, "status");
+    // Content from the fixture's own recorded state, not from this client.
+    assert.equal(envelope.data.productState, "mvp");
+    assert.equal(envelope.data.evidence.total, 5);
+    assert.equal(envelope.data.ecp.segment, "regional LTL carriers");
+  } finally {
+    await kernel.close();
+  }
+});
+
+test("a refusing surface is a RESULT the caller can read, never a thrown error", async () => {
+  const kernel = await openKernel({ projectDir: PROJECT_DIR });
+  try {
+    // gtm_canvas refuses on this fixture: the worksheet is scaffolded and empty.
+    // The kernel exits non-zero saying so, and that refusal is the answer — a
+    // client that turned it into an exception would destroy the very words the
+    // brief has to carry.
+    const envelope = await kernel.callTool("gtm_canvas");
+
+    assert.equal(envelope.ok, false);
+    assert.ok(envelope.problems.length > 0, "a refusal must name what is missing");
+    assert.match(envelope.problems[0].message, /value-prop\.md/);
+  } finally {
+    await kernel.close();
+  }
+});

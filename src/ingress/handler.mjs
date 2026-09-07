@@ -5,9 +5,65 @@
 // exactly one thing on top of it: turn a delivery that survived all of that into a
 // validated ResearchRequest on the job queue.
 
-import { createEngine } from "webhook-engine";
+import { createEngine, DEFAULT_ID_HEADER } from "webhook-engine";
 import { makeResearchRequest } from "../types.mjs";
 import { createJobQueue } from "./queue.mjs";
+
+/** Marks a body the JSON parser refused, so the failure reaches the handler as a
+ *  value instead of escaping as an exception. Symbol-keyed, so no payload field
+ *  can forge it. */
+const PARSE_FAILURE = Symbol("ingress.parseFailure");
+
+/**
+ * Parsing that reports rather than throws.
+ *
+ * webhook-engine's default `parse` is JSON.parse, and a throw from it answers 400
+ * `unparsable` with nothing stored. That is the right default for a library — but a
+ * body here arrived from a sender that PASSED verification, so the broken payload is
+ * evidence worth keeping and replaying, not noise worth dropping. Returning the
+ * failure instead of throwing moves the decision into the handler, whose failures
+ * are exactly what the dead letter queue is for.
+ *
+ * Verification still runs first. This changes where a parse failure lands, never
+ * whether an unauthenticated caller gets to reach the parser at all.
+ */
+function reportingParse(rawText) {
+  try {
+    return JSON.parse(rawText);
+  } catch (error) {
+    return { [PARSE_FAILURE]: error.message };
+  }
+}
+
+/**
+ * A failure that will fail identically on every retry. `retryable: false` is
+ * webhook-engine's own classifier hook: it sends the delivery to the dead letter
+ * queue after one attempt instead of four, because retrying a validation error is
+ * four times the load for the same answer.
+ */
+function permanent(message) {
+  const error = new Error(message);
+  error.retryable = false;
+  return error;
+}
+
+/**
+ * THE ID COMES FROM THE SIGNED BODY FIRST, AND THE HEADER IS ONLY A FALLBACK.
+ *
+ * The HMAC covers the timestamp and the body. It does not cover `webhook-id`, so an
+ * id read from that header is editable in flight by anything that can rewrite
+ * headers — a proxy, a sidecar, a compromised load balancer. Preferring the header
+ * would let one signed delivery be re-presented under a fresh id and enqueued a
+ * second time, which defeats the replay refusal without ever touching the signature.
+ * Reading the body first means the idempotency key is covered by the signature
+ * whenever the sender puts it there.
+ */
+function resolveRequestId(body, headers) {
+  const fromBody = body?.requestId ?? body?.id ?? body?.event_id ?? body?.eventId;
+  if (typeof fromBody === "string" && fromBody.length > 0) return fromBody;
+  const fromHeader = headers.get(DEFAULT_ID_HEADER);
+  return typeof fromHeader === "string" && fromHeader.length > 0 ? fromHeader : null;
+}
 
 /**
  * @param {object} options
@@ -18,11 +74,23 @@ import { createJobQueue } from "./queue.mjs";
 export function createIngress({ secret, jobsDir = "jobs", queue = createJobQueue({ dir: jobsDir }), ...engineOptions } = {}) {
   const engine = createEngine({
     secret,
+    parse: reportingParse,
+    eventId: resolveRequestId,
     ...engineOptions,
     handler: async (event) => {
+      const parseFailure = event.body?.[PARSE_FAILURE];
+      if (typeof parseFailure === "string")
+        throw permanent(`body is not valid JSON: ${parseFailure}`);
+
       // The requestId IS the delivery id, so a replay of the same event resolves to
       // the same idempotency key and cannot produce a second job.
-      const request = makeResearchRequest({ ...event.body, requestId: event.id });
+      let request;
+      try {
+        request = makeResearchRequest({ ...event.body, requestId: event.id });
+      } catch (error) {
+        throw permanent(`not a research request: ${error.message}`);
+      }
+
       const job = await queue.append(request);
       return { requestId: job.requestId, enqueuedAt: job.enqueuedAt };
     },

@@ -153,3 +153,50 @@ test("a delivery replayed outside the timestamp window is refused and enqueues n
   assert.equal(result.reason, "timestamp_out_of_tolerance");
   assert.equal(readJobs(dir).length, 0);
 });
+
+test("a verified delivery whose body is not JSON is dead lettered with the reason", async () => {
+  const dir = freshDir();
+  const ingress = createIngress({ secret: SECRET, jobsDir: dir });
+
+  // Genuinely from the provider — the signature is valid over these bytes. The bytes
+  // just are not JSON. A verified sender's broken payload is worth keeping, which is
+  // what separates it from the forged delivery above.
+  const { rawBody, headers } = signedDelivery("{not json at all");
+  headers["webhook-id"] = "evt_broken_001";
+
+  const result = await ingress.handleDelivery(rawBody, headers);
+
+  assert.equal(result.outcome, "dead_lettered");
+  assert.equal(readJobs(dir).length, 0, "a body that cannot be parsed never becomes a job");
+
+  const records = await ingress.dlq.list();
+  assert.equal(records.length, 1);
+  assert.equal(records[0].eventId, "evt_broken_001");
+  assert.match(records[0].errors[0].message, /JSON/i, "the refusal names what was wrong");
+
+  // Parsing the same bytes a second time produces the same failure, so retrying is
+  // pure cost. The classifier must stop it at one attempt.
+  assert.equal(records[0].attempts, 1);
+});
+
+test("a verified delivery that fails makeResearchRequest is dead lettered with the reason", async () => {
+  const dir = freshDir();
+  const ingress = createIngress({ secret: SECRET, jobsDir: dir });
+
+  // Valid JSON, correctly signed, and still not a research request: no accountName.
+  const { rawBody, headers } = signedDelivery({
+    id: "evt_no_account_001",
+    domain: "northwind.example",
+  });
+
+  const result = await ingress.handleDelivery(rawBody, headers);
+
+  assert.equal(result.outcome, "dead_lettered");
+  assert.equal(readJobs(dir).length, 0, "an invalid request never becomes a job");
+
+  const records = await ingress.dlq.list();
+  assert.equal(records.length, 1);
+  assert.equal(records[0].eventId, "evt_no_account_001");
+  assert.match(records[0].errors[0].message, /accountName/);
+  assert.equal(records[0].attempts, 1);
+});

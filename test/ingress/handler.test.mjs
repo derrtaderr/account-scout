@@ -287,6 +287,41 @@ test("the same garbage bytes replayed keep exactly one dead letter record", asyn
   assert.equal(readJobs(dir).length, 0);
 });
 
+// F3. The verify-before-store deviation stands, so forged traffic leaves no durable
+// trace by design. That is correct and it is also blind: an endpoint under attack
+// looks exactly like an idle one. A counter is the smallest thing that fixes the
+// blindness without reintroducing the storage the deviation exists to protect.
+test("forged deliveries are counted, while storing nothing", async () => {
+  const dir = freshDir();
+  const ingress = createIngress({ secret: SECRET, jobsDir: dir });
+
+  assert.equal(ingress.stats.rejected, 0);
+
+  for (const n of [1, 2, 3]) {
+    const { rawBody, headers } = signedDelivery(
+      { requestId: `evt_forged_${n}`, accountName: "Acme Freight" },
+      { secret: "whsec_synthetic_wrong_key" },
+    );
+    await ingress.handleDelivery(rawBody, headers);
+  }
+
+  assert.equal(ingress.stats.rejected, 3, "the attempt is visible");
+  assert.equal((await ingress.dlq.list()).length, 0, "no bytes retained");
+  assert.equal(readJobs(dir).length, 0);
+});
+
+test("a verified delivery does not increment the rejected counter", async () => {
+  const ingress = createIngress({ secret: SECRET, jobsDir: freshDir() });
+
+  const { rawBody, headers } = signedDelivery({
+    requestId: "evt_ok_001",
+    accountName: "Northwind Robotics",
+  });
+  await ingress.handleDelivery(rawBody, headers);
+
+  assert.equal(ingress.stats.rejected, 0, "a counter that counts everything measures nothing");
+});
+
 test("enqueueLocal skips HTTP but not validation", async () => {
   const dir = freshDir();
   const ingress = createIngress({ secret: SECRET, jobsDir: dir });

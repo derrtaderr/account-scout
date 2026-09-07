@@ -134,12 +134,24 @@ export function createIngress({
   dlq = new MemoryDeadLetterQueue(),
   ...engineOptions
 } = {}) {
+  // Forged traffic leaves no durable trace, by design — see the verify-before-store
+  // note in WIRING.md. Correct, and also blind: an endpoint under attack looks
+  // exactly like an idle one. A counter restores the signal without reintroducing
+  // the storage the design exists to protect. It holds a number and nothing else:
+  // no bytes, no headers, no signatures, and it is never logged.
+  const stats = { rejected: 0 };
+  const callerOnEvent = engineOptions.onEvent;
+
   const engine = createEngine({
     secret,
     parse: reportingParse,
     eventId: resolveRequestId,
     dlq: dedupingDeadLetterQueue(dlq),
     ...engineOptions,
+    onEvent: (info) => {
+      if (info.outcome === "rejected") stats.rejected += 1;
+      callerOnEvent?.(info);
+    },
     handler: async (event) => {
       const parseFailure = event.body?.[PARSE_FAILURE];
       if (typeof parseFailure === "string")
@@ -199,6 +211,7 @@ export function createIngress({
   return {
     handleDelivery: (rawBody, headers) => handleDelivery(rawBody, headers, deps),
     enqueueLocal,
+    stats,
     engine,
     queue,
     store: engine.store,

@@ -112,3 +112,44 @@ test("the same bytes that were refused are accepted by the intake holding the ma
   assert.equal(result.outcome, "processed");
   assert.equal(readJobs(dir).length, 1);
 });
+
+test("a replayed delivery is refused as a duplicate and enqueues exactly one job", async () => {
+  const dir = freshDir();
+  const ingress = createIngress({ secret: SECRET, jobsDir: dir });
+
+  // The identical bytes, delivered twice. This is not an edge case: every provider
+  // redelivers when its 200 is lost on the way back.
+  const { rawBody, headers } = signedDelivery({
+    id: "evt_replay_001",
+    accountName: "Lumen Freight",
+  });
+
+  const first = await ingress.handleDelivery(rawBody, headers);
+  const second = await ingress.handleDelivery(rawBody, headers);
+
+  assert.equal(first.outcome, "processed");
+  assert.equal(second.outcome, "duplicate", "the refusal names what was wrong");
+  assert.equal(second.eventId, "evt_replay_001");
+
+  assert.equal(readJobs(dir).length, 1, "a replay never produces a second job");
+});
+
+test("a delivery replayed outside the timestamp window is refused and enqueues nothing", async () => {
+  const dir = freshDir();
+  const ingress = createIngress({ secret: SECRET, jobsDir: dir });
+
+  // Correctly signed, but captured an hour ago. The timestamp is bound into the
+  // signed payload, so an attacker cannot freshen it without the key.
+  const stale = Math.floor(Date.now() / 1000) - 3600;
+  const { rawBody, headers } = signedDelivery(
+    { id: "evt_stale_001", accountName: "Northwind Robotics" },
+    { timestamp: stale },
+  );
+
+  const result = await ingress.handleDelivery(rawBody, headers);
+
+  assert.equal(result.status, 401);
+  assert.equal(result.outcome, "rejected");
+  assert.equal(result.reason, "timestamp_out_of_tolerance");
+  assert.equal(readJobs(dir).length, 0);
+});

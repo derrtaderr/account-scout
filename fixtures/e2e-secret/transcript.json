@@ -1,0 +1,24 @@
+{
+  "recordedWith": {
+    "mode": "recorded",
+    "note": "Synthetic. One citable claim so the run delivers; the page content also carries a synthetic secret that egress must strip. The overview query matches what the planner emits for {accountName, domain} with no questions."
+  },
+  "searches": [
+    {
+      "query": "Acme Freight company overview",
+      "results": [{ "url": "https://acmefreight.example/about", "title": "About Acme Freight" }]
+    }
+  ],
+  "candidates": [
+    {
+      "text": "Acme Freight operates a regional less-than-truckload network across the American Midwest.",
+      "kind": "factual",
+      "citations": [
+        {
+          "url": "https://acmefreight.example/about",
+          "quote": "operates a regional less-than-truckload network across the American Midwest"
+        }
+      ]
+    }
+  ]
+}

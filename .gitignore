@@ -4,3 +4,4 @@ node_modules/
 .env
 jobs/
 telemetry/
+demo/events.jsonl

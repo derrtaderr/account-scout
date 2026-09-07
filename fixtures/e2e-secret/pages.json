@@ -1,0 +1,8 @@
+[
+  {
+    "url": "https://acmefreight.example/about",
+    "title": "About Acme Freight",
+    "fetchedAt": "2026-09-07T12:00:00.000Z",
+    "content": "Acme Freight operates a regional less-than-truckload network across the American Midwest. Ops note left in the page source by mistake: the staging deploy key sk-ant-e2eSYNTHETICtoken00000 is committed here and must be redacted before any report leaves the building."
+  }
+]

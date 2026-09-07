@@ -1,0 +1,91 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>GTM Agent Evals — Dashboard</title>
+<style>
+
+  :root { color-scheme: light dark; }
+  * { box-sizing: border-box; }
+  body { margin: 0; font: 15px/1.5 -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+         background: #0f1115; color: #e7e9ee; }
+  .wrap { max-width: 980px; margin: 0 auto; padding: 32px 20px 64px; }
+  .head h1 { margin: 0 0 4px; font-size: 26px; letter-spacing: -0.02em; }
+  .sub { margin: 0; color: #99a0ad; }
+  h2 { margin: 32px 0 12px; font-size: 15px; text-transform: uppercase; letter-spacing: 0.08em; color: #99a0ad; }
+  .cards { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 12px; margin-top: 20px; }
+  .cardbox { background: #171a21; border: 1px solid #262b36; border-radius: 12px; padding: 16px; }
+  .cardval { font-size: 28px; font-weight: 650; letter-spacing: -0.02em; }
+  .cardlabel { color: #99a0ad; font-size: 13px; margin-top: 2px; }
+  table.grid { width: 100%; border-collapse: collapse; overflow-x: auto; display: block; }
+  .grid th, .grid td { text-align: left; padding: 10px 12px; border-bottom: 1px solid #262b36; white-space: nowrap; }
+  .grid th { color: #99a0ad; font-weight: 550; font-size: 13px; }
+  .mono { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; }
+  .muted { color: #5b6472; }
+  .chip { display: inline-block; padding: 1px 8px; border-radius: 999px; font-size: 12px; font-weight: 600; }
+  .chip.pass { background: #12351f; color: #74e0a0; }
+  .chip.block { background: #3a1618; color: #f28b8b; }
+  .chip.warn { background: #3a2f12; color: #f0cf7a; }
+  .badge { font-size: 12px; font-weight: 600; }
+  .badge.cleared { color: #74e0a0; }
+  .badge.pending { color: #f0cf7a; }
+  .history { white-space: normal; }
+  .reason { color: #f28b8b; font-size: 12px; margin-top: 4px; white-space: normal; font-family: -apple-system, sans-serif; }
+  .empty { color: #99a0ad; font-style: italic; }
+  .foot { margin-top: 40px; color: #5b6472; font-size: 13px; }
+
+</style>
+</head>
+<body>
+<main class="wrap">
+  <header class="head">
+    <h1>GTM Agent Evals</h1>
+    <p class="sub">Verdict history, autonomy streaks, and golden regression — read from telemetry, no server required.</p>
+  </header>
+
+  <section class="cards">
+    <div class="cardbox"><div class="cardval">3</div><div class="cardlabel">Total runs</div></div>
+    <div class="cardbox"><div class="cardval">100%</div><div class="cardlabel">Pass rate</div></div>
+    <div class="cardbox"><div class="cardval">1</div><div class="cardlabel">Configs tracked</div></div>
+    <div class="cardbox"><div class="cardval">0</div><div class="cardlabel">Blocked</div></div>
+  </section>
+
+  <section>
+    <h2>Configs</h2>
+    <table class="grid">
+          <thead>
+            <tr>
+              <th>Config</th><th>Archetype</th><th>Runs</th>
+              <th>Autonomy streak</th><th>Gate</th><th>History</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+    <td class="mono">account-scout-research</td>
+    <td>research</td>
+    <td>3/3 PASS</td>
+    <td class="mono">3</td>
+    <td><span class="badge pending">not cleared (3/5)</span></td>
+    <td class="history"><span class="chip pass">PASS</span> <span class="chip pass">PASS</span> <span class="chip pass">PASS</span></td>
+  </tr>
+          </tbody>
+        </table>
+  </section>
+
+  <section>
+    <h2>Regression</h2>
+    <p class="empty">No regression results supplied.</p>
+  </section>
+
+  <footer class="foot">Static dashboard over the telemetry JSONL. Distribute, don't host.</footer>
+</main>
+<script>
+
+  document.querySelectorAll("table.grid tbody tr").forEach(function (row) {
+    row.addEventListener("click", function () { row.style.opacity = row.style.opacity === "0.45" ? "1" : "0.45"; });
+  });
+
+</script>
+</body>
+</html>

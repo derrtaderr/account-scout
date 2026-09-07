@@ -1,0 +1,5 @@
+{
+  "accountName": "Acme Freight",
+  "domain": "acmefreight.example",
+  "note": "Synthetic e2e fixture. Its page content deliberately carries a synthetic secret token so the end-to-end test can prove redaction-gate actually strips egress. No real account, no real key."
+}

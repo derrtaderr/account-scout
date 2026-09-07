@@ -28,7 +28,13 @@ export const RESEARCH_CONFIG_ID = "account-scout-research";
 
 /** The telemetry path convention for this repo: one JSONL file, repo-root
  *  relative, append-only, written by the library's own sink. */
-export const TELEMETRY_PATH = "telemetry/events.jsonl";
+import { fileURLToPath } from "node:url";
+import { dirname, resolve } from "node:path";
+// Resolved against the PACKAGE root, not the process cwd: a serve loop or cron
+// started from another directory must not scatter the streak across telemetry
+// files (review, minor). Pass telemetryPath explicitly to relocate it.
+const PACKAGE_ROOT = resolve(dirname(fileURLToPath(import.meta.url)), "..", "..");
+export const TELEMETRY_PATH = resolve(PACKAGE_ROOT, "telemetry", "events.jsonl");
 
 /**
  * Map a completed run to the shape gtm-agent-evals judges.

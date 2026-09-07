@@ -175,7 +175,7 @@ test("unattended processing refuses before doing ANY work when the streak is une
   const { deps } = makeDeps();
   seedStreak(deps.telemetryPath, ["PASS", "BLOCK", "PASS"]); // streak 1 of 3
 
-  const result = await processUnattended(cleanReport(), deps);
+  const result = await processUnattended(cleanReport(), { ...deps, gateN: 3 });
   assert.equal(result.status, "refused");
   assert.equal(result.refusedBy, "autonomy");
   assert.match(result.reason, /streak 1 of 3 — unattended mode refused/);
@@ -186,9 +186,9 @@ test("unattended processing refuses before doing ANY work when the streak is une
 
 test("unattended processing proceeds once the streak is earned, and says so", async () => {
   const { deps } = makeDeps();
-  seedStreak(deps.telemetryPath, ["PASS", "PASS", "PASS"]); // streak 3 of 3
+  seedStreak(deps.telemetryPath, ["PASS", "PASS", "PASS"]); // streak 3, gate pinned to 3 here
 
-  const result = await processUnattended(cleanReport(), deps);
+  const result = await processUnattended(cleanReport(), { ...deps, gateN: 3 });
   assert.equal(result.status, "delivered");
   assert.equal(result.autonomy.allowed, true);
   assert.equal(result.autonomy.streak, 3);

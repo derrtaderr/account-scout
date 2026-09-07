@@ -12,7 +12,10 @@ import { readEvents, autonomyStreak } from "gtm-agent-evals/dist/index.js";
 import { TELEMETRY_PATH } from "./evals.mjs";
 
 /** Clean runs required before unattended mode is allowed. */
-export const DEFAULT_GATE_N = 3;
+// The library's own research archetype ships gateN 5, and departing downward
+// from the published default was an undocumented loosening (review, minor).
+// Overridable per call; the default now matches gtm-agent-evals' researchConfig.
+export const DEFAULT_GATE_N = 5;
 
 /**
  * Decide whether `configId` has earned unattended operation.
@@ -20,7 +23,7 @@ export const DEFAULT_GATE_N = 3;
  * @param {string} configId whose streak to read
  * @param {object} [opts]
  * @param {string} [opts.telemetryPath] defaults to the repo convention
- * @param {number} [opts.gateN] clean runs required, default 3
+ * @param {number} [opts.gateN] clean runs required, default DEFAULT_GATE_N (5, the library's research default)
  * @returns {{allowed: true, streak: number, gateN: number} |
  *           {allowed: false, streak: number, gateN: number, reason: string}}
  * @throws when the telemetry itself cannot be trusted (corrupt line, tz-less

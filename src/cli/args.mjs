@@ -90,6 +90,7 @@ function parseRun(argv) {
   const project = takeValue(argv, "--project");
   const out = takeValue(argv, "--out");
   const requestId = takeValue(argv, "--request-id");
+  const telemetry = takeValue(argv, "--telemetry");
 
   if (!account)
     throw new UsageError("run needs --account NAME — the account to research");
@@ -109,6 +110,7 @@ function parseRun(argv) {
     project,
     out,
     requestId,
+    telemetry,
   });
 }
 

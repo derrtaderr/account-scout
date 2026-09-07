@@ -90,6 +90,25 @@ test("a missing fixture store refuses and exits 3 — a decision, not a crash", 
   assert.equal(existsSync(join(dir, "report.md")), false, "nothing is written on a refusal");
 });
 
+test("--telemetry lands the run's verdict at the given path, not the package default", async () => {
+  const dir = mkdtempSync(join(tmpdir(), "as-cli-run-"));
+  const telemetry = join(dir, "telemetry", "events.jsonl");
+  const opts = parseArgs([
+    "run", "--account", "Northwind Robotics",
+    "--domain", "northwindrobotics.com",
+    "--fixtures", fixture("northwind-robotics"),
+    "--out", join(dir, "report.md"),
+    "--request-id", "req-run-tel",
+    "--telemetry", telemetry,
+  ]);
+  assert.equal(opts.telemetry, telemetry, "run must parse --telemetry, not ignore it");
+  const { deps } = io();
+
+  await runCommand(opts, deps);
+
+  assert.equal(existsSync(telemetry), true, "the verdict is recorded at the requested path");
+});
+
 test("an --out that is not a .md path is a usage error, exit 2", async () => {
   const dir = mkdtempSync(join(tmpdir(), "as-cli-run-"));
   const opts = parseArgs([

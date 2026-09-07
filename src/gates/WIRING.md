@@ -166,3 +166,22 @@ install) and `"main": "dist/index.js"` (or an `exports` map) to
 gtm-agent-evals' package.json. It is a public repo change, so it ships only
 on Jason's explicit push-yes; when it lands, the deep imports here can move
 to the package root in one find-and-replace.
+
+## Fix wave 1 (review-hardened, 2026-09-07)
+
+- **The streak measures DELIVERY, not scoring.** `processReport` records telemetry
+  AFTER the guarded write, with a delivery-aware status. An egress-refused run
+  records BLOCK (reasons prefixed `egress refused:`), so three caught leaks in a
+  row leave three BLOCKs and a shut gate rather than earning unattended mode.
+  "3 clean runs" means three consecutive evaluated-clean AND delivered runs.
+- **Telemetry is post-redaction by construction.** `recordVerdict` scrubs every
+  `verdict.reasons` entry and `violation.message` through the egress's `redactText`
+  (same config as the writers, fail-closed to `[unredactable: …]`). Eval rules
+  embed run sentences in violation messages, so events.jsonl is an egress surface
+  and is guarded like one. Lane E may render a dashboard from it; re-guarding at
+  render is still house posture, not required.
+- `DEFAULT_GATE_N` is 5, matching gtm-agent-evals' own researchConfig; overridable
+  per call. `TELEMETRY_PATH` resolves against the package root, so a serve/cron
+  process started from another cwd does not scatter the streak; pass `telemetryPath`
+  to relocate. A `reportPath` not ending `.md` is refused (a quarantined report
+  must never wear the delivered name).

@@ -81,6 +81,32 @@ test("a signed webhook becomes a job that a tick drains to a guarded report", as
   scout.server.close();
 });
 
+test("unattended serve on a fresh streak refuses to work — the verified job waits, unprocessed and un-poisoned", async () => {
+  const { dir, opts, deps } = harness(["serve", "--unattended", "--fixtures", NORTHWIND_FIXTURE]);
+  const scout = createScoutServer(opts, deps);
+
+  const { rawBody, headers } = signed({
+    requestId: "evt-unattended-1",
+    accountName: "Northwind Robotics",
+    domain: "northwindrobotics.com",
+  });
+  const res = await scout.ingress.handleDelivery(rawBody, headers);
+  assert.equal(res.status, 200, "the delivery is still verified and queued");
+
+  // The streak is 0 of 5 — unattended is not earned. Many ticks, no work done.
+  for (let i = 0; i < 4; i++) {
+    const worked = await scout.tick();
+    assert.deepEqual(worked, [], "an un-earned unattended tick processes nothing");
+  }
+
+  assert.equal(existsSync(join(dir, "reports")), false, "no report was written");
+  // The verified job is untouched: still the next job, nothing poisoned.
+  assert.equal((await scout.ingress.queue.nextJob())?.requestId, "evt-unattended-1");
+  assert.equal(existsSync(scout.ingress.queue.poisonPath), false, "nothing poisoned");
+
+  scout.server.close();
+});
+
 test("the report about an account keeps that account's own domain — per-job egress", async () => {
   const { opts, deps } = harness(["serve", "--fixtures", NORTHWIND_FIXTURE]);
   const scout = createScoutServer(opts, deps);
@@ -97,6 +123,38 @@ test("the report about an account keeps that account's own domain — per-job eg
   // as if it were some other client's — that is what per-job egress buys.
   const text = readFileSync(worked.result.reportPath, "utf8");
   assert.match(text, /northwindrobotics\.com/);
+
+  scout.server.close();
+});
+
+test("per-job egress ISOLATES accounts — one account's domain is redacted from a different account's report", async () => {
+  // Both jobs replay the same fixture (its content mentions northwindrobotics.com),
+  // so both research the same content — but they declare DIFFERENT own-domains.
+  // The job whose own domain is northwindrobotics.com keeps it; the job whose own
+  // domain is stranger.example gets northwindrobotics.com REDACTED, because its
+  // egress allows only stranger.example. Same content, opposite outcome, driven
+  // solely by the per-request allow-list — the regression guard for fresh egress
+  // per request. (Same account name so both match the fixture's recorded queries.)
+  const { opts, deps } = harness(["serve", "--fixtures", NORTHWIND_FIXTURE]);
+  const scout = createScoutServer(opts, deps);
+
+  const owner = signed({ requestId: "evt-owner", accountName: "Northwind Robotics", domain: "northwindrobotics.com" });
+  const stranger = signed({ requestId: "evt-stranger", accountName: "Northwind Robotics", domain: "stranger.example" });
+  await scout.ingress.handleDelivery(owner.rawBody, owner.headers);
+  await scout.ingress.handleDelivery(stranger.rawBody, stranger.headers);
+
+  const worked = await scout.tick();
+  const byId = Object.fromEntries(worked.map((w) => [w.requestId, w]));
+
+  const ownerReport = readFileSync(byId["evt-owner"].result.reportPath, "utf8");
+  const strangerReport = readFileSync(byId["evt-stranger"].result.reportPath, "utf8");
+
+  assert.match(ownerReport, /northwindrobotics\.com/, "the owner keeps its own domain");
+  assert.doesNotMatch(
+    strangerReport,
+    /northwindrobotics\.com/,
+    "a different account must NOT inherit the owner's allow-list — the domain is redacted",
+  );
 
   scout.server.close();
 });

@@ -202,6 +202,54 @@ test("an egress refusal DOES complete the job — the report's content was decid
   assert.equal(await queue.nextJob(), null, "an egress decision consumes the job");
 });
 
+test("an unattended worker that has NOT earned autonomy touches nothing — claims and poisons nothing across many ticks", async () => {
+  // The blocker this guards against: claiming a job before the autonomy check
+  // meant every refused tick counted an attempt, so a verified request was
+  // POISONED after 3 ticks — and because autonomy refuses before telemetry is
+  // written, a pure-unattended fresh streak could never advance. The fix makes
+  // autonomy a PRE-GATE: an un-earned unattended worker does not look at the
+  // queue at all. The verified job waits, pristine, for an attended run or for
+  // autonomy to be earned.
+  const { queue, deps } = makeHarness({
+    autonomyCheck: () => ({ allowed: false, reason: "unattended needs 5 clean runs, streak is 0" }),
+  });
+  await queue.append(
+    makeResearchRequest({
+      accountName: "Northwind Robotics",
+      domain: "northwindrobotics.com",
+      requestId: "req-unearned",
+    }),
+  );
+
+  for (let i = 0; i < 5; i++) {
+    const r = await drainOnce(deps);
+    assert.equal(r.idle, true, "an un-earned unattended tick is idle");
+    assert.match(r.autonomyRefused, /streak is 0/);
+  }
+
+  // More ticks than maxAttempts (3), yet the job is untouched: still the next
+  // job, and nothing was poisoned.
+  assert.equal((await queue.nextJob())?.requestId, "req-unearned");
+  assert.equal(existsSync(queue.poisonPath), false, "an un-earned worker poisons nothing");
+});
+
+test("once autonomy is earned, the unattended worker processes the job normally", async () => {
+  const { queue, deps } = makeHarness({
+    autonomyCheck: () => ({ allowed: true }),
+  });
+  await queue.append(
+    makeResearchRequest({
+      accountName: "Northwind Robotics",
+      domain: "northwindrobotics.com",
+      requestId: "req-earned",
+    }),
+  );
+
+  const r = await drainOnce(deps);
+  assert.equal(r.result.status, "delivered", "an earned worker drains the job");
+  assert.equal(await queue.nextJob(), null, "and completes it");
+});
+
 test("the strategy brief reaches the run", async () => {
   let sawBrief;
   const { queue, deps } = makeHarness({

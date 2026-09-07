@@ -96,10 +96,9 @@ export async function runCommand(opts, deps) {
 
     const report = await runScout({ request, provider, brief, now });
 
-    const egress = createEgress({
-      allowDomains: opts.domain ? [opts.domain] : [],
-      out: stdout,
-    });
+    const egress = deps.makeEgress
+      ? deps.makeEgress(opts)
+      : createEgress({ allowDomains: opts.domain ? [opts.domain] : [], out: stdout });
     const result = await processReport(report, {
       egress,
       reportPath,
@@ -108,9 +107,20 @@ export async function runCommand(opts, deps) {
       now,
     });
 
-    await egress.emitSummary(report);
-
-    if (result.status === "delivered") return EXIT.DELIVERED;
+    if (result.status === "delivered") {
+      // The report already landed, redacted, on disk. The stdout summary is a
+      // cosmetic echo of it; if that echo trips the egress gate (it shares the
+      // report's redaction config), withhold the LINE, not the delivery — a
+      // summary that cannot print safely is not a delivery failure, and mapping
+      // it to a defect or a refusal would misreport a report that shipped fine.
+      try {
+        await egress.emitSummary(report);
+      } catch (err) {
+        if (err?.name !== "RedactionRefusal") throw err;
+        stderr.write("summary line withheld by the egress gate; the report was written and is redacted\n");
+      }
+      return EXIT.DELIVERED;
+    }
     stderr.write(`refused by ${result.refusedBy}: ${result.reason}\n`);
     return EXIT.REFUSED;
   } catch (err) {

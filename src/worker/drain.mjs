@@ -45,6 +45,13 @@ import { ScoutRefusal } from "../scout/errors.mjs";
  *   cannot hold both allow-lists at once.
  * @param {(request: object) => string} deps.reportPathFor where a delivered
  *   report for this request lands (must end in ".md")
+ * @param {() => ({allowed: boolean, reason?: string}) | Promise<{allowed: boolean, reason?: string}>} [deps.autonomyCheck]
+ *   the unattended PRE-GATE. When present and it refuses, the worker touches
+ *   NOTHING — it does not peek, claim, research, or poison. An un-earned
+ *   unattended worker must leave every verified request pristine for a later
+ *   attended run or for autonomy to be earned; claiming first (and letting the
+ *   attempt count toward the poison exit) would silently discard verified work.
+ *   Omitted for the attended path, which never consults autonomy here.
  * @param {(request: object) => Promise<string|undefined>} [deps.briefFor] the
  *   strategy brief, aimed by the kernel; undefined runs the scout unaimed
  * @param {(report: object, pdeps: object) => Promise<object>} [deps.process]
@@ -65,6 +72,7 @@ export async function drainOnce(deps) {
     reportPathFor,
     briefFor,
     process: processFn = processReport,
+    autonomyCheck,
     telemetryPath,
     configId,
     runIdFor = () => randomUUID(),
@@ -72,6 +80,16 @@ export async function drainOnce(deps) {
     gateN,
     now = () => new Date().toISOString(),
   } = deps;
+
+  // THE AUTONOMY PRE-GATE, before the queue is even peeked. An unattended
+  // worker that has not earned autonomy must not claim a job — claiming counts
+  // an attempt toward the poison exit, and a job refused for permission three
+  // ticks running would be discarded, verified work with no redelivery coming.
+  // Refuse to work, touch nothing, leave the request for a later attended run.
+  if (autonomyCheck) {
+    const decision = await autonomyCheck();
+    if (!decision.allowed) return { idle: true, autonomyRefused: decision.reason };
+  }
 
   const job = await queue.nextJob();
   if (!job) return { idle: true };
@@ -124,6 +142,13 @@ export async function drainOnce(deps) {
  * complete in this pass and hands control back, exactly as a serve loop would
  * (it will come around again on the next tick, letting the attempt count climb
  * toward poison across ticks rather than in a tight spin).
+ *
+ * KNOWN LIMITATION (eventually-correct): because `nextJob` always returns the
+ * OLDEST uncompleted job, a persistently-refusing job at the head delays the
+ * jobs behind it until it poisons (~maxAttempts ticks). This is latency, not
+ * loss — the later jobs are never dropped, just deferred — and fixing it means
+ * a "next after N" cursor in the queue, which is a queue change, not a worker
+ * one. Documented rather than silently accepted.
  *
  * @param {object} deps as drainOnce
  * @param {object} [opts]

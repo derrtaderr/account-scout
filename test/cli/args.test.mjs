@@ -127,6 +127,28 @@ test("a non-numeric --port is refused, not coerced to NaN", () => {
   );
 });
 
+test("an unrecognised flag is refused, not silently ignored on the way to a run", () => {
+  assert.throws(
+    () => parseArgs(["run", "--account", "X", "--live", "--typo", "oops"]),
+    (err) => {
+      assert.ok(err instanceof UsageError);
+      assert.match(err.message, /--typo/);
+      return true;
+    },
+  );
+});
+
+test("a leftover positional is refused too", () => {
+  assert.throws(
+    () => parseArgs(["serve", "--live", "stray"]),
+    (err) => {
+      assert.ok(err instanceof UsageError);
+      assert.match(err.message, /stray/);
+      return true;
+    },
+  );
+});
+
 test("report defaults to the dashboard action with a default output path", () => {
   const parsed = parseArgs(["report"]);
   assert.equal(parsed.command, "report");

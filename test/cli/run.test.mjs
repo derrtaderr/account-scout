@@ -109,6 +109,40 @@ test("--telemetry lands the run's verdict at the given path, not the package def
   assert.equal(existsSync(telemetry), true, "the verdict is recorded at the requested path");
 });
 
+test("a redaction refusal on the cosmetic summary keeps the delivered exit 0 — the report already landed", async () => {
+  // The report writes and delivers, but the stdout summary line trips the egress
+  // gate. That is not a delivery failure: the report is on disk and redacted, so
+  // the run must stay exit 0 and merely withhold the summary line — never
+  // downgrade to a defect (1) or a refusal (3).
+  const dir = mkdtempSync(join(tmpdir(), "as-cli-run-"));
+  const opts = parseArgs([
+    "run", "--account", "Northwind Robotics",
+    "--domain", "northwindrobotics.com",
+    "--fixtures", fixture("northwind-robotics"),
+    "--out", join(dir, "report.md"),
+    "--request-id", "req-run-sum",
+    "--telemetry", join(dir, "telemetry", "events.jsonl"),
+  ]);
+  const { err, deps } = io();
+
+  const refusal = () => {
+    const e = new Error("a survivor tripped the summary");
+    e.name = "RedactionRefusal";
+    throw e;
+  };
+  const code = await runCommand(opts, {
+    ...deps,
+    makeEgress: () => ({
+      writeReport: async () => ({ path: join(dir, "report.md") }),
+      emitSummary: refusal,
+      redactText: (t) => t,
+    }),
+  });
+
+  assert.equal(code, 0, "a summary refusal does not sink a delivered report");
+  assert.match(err.join(""), /summary line withheld/);
+});
+
 test("an --out that is not a .md path is a usage error, exit 2", async () => {
   const dir = mkdtempSync(join(tmpdir(), "as-cli-run-"));
   const opts = parseArgs([

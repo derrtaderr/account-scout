@@ -1,6 +1,6 @@
 # Account research: Acme Freight
 
-Generated 2026-09-07T23:16:14.453Z (mode: recorded)
+Generated 2026-09-07T23:30:04.463Z (mode: recorded)
 
 ## Claims (1)
 
@@ -23,7 +23,7 @@ Generated 2026-09-07T23:16:14.453Z (mode: recorded)
 ```json
 {
   "account": "Acme Freight",
-  "generatedAt": "2026-09-07T23:16:14.453Z",
+  "generatedAt": "2026-09-07T23:30:04.463Z",
   "claims": [
     {
       "id": "c1",

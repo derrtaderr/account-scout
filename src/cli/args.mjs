@@ -56,6 +56,16 @@ function takeInt(argv, flag) {
   return Number(raw);
 }
 
+/** After every known flag has been taken, argv must be empty. A leftover is a
+ *  typo or an unsupported flag, and "mode is never guessed" means it is a usage
+ *  error, not something silently ignored on the way to a live run. */
+function refuseLeftovers(argv, command) {
+  if (argv.length === 0) return;
+  throw new UsageError(
+    `${command}: unrecognised argument${argv.length === 1 ? "" : "s"}: ${argv.join(" ")}`,
+  );
+}
+
 /** Exactly-one-of the two mode flags; recorded is the default. */
 function resolveMode(argv) {
   const recorded = takeBool(argv, "--recorded");
@@ -100,6 +110,7 @@ function parseRun(argv) {
         "(account.json, pages.json, transcript.json). Use --live for real web research.",
     );
 
+  refuseLeftovers(argv, "run");
   return Object.freeze({
     command: "run",
     mode,
@@ -131,6 +142,7 @@ function parseServe(argv) {
       "recorded serve needs --fixtures DIR — the store every queued job replays. Use --live for real web research.",
     );
 
+  refuseLeftovers(argv, "serve");
   return Object.freeze({
     command: "serve",
     mode,
@@ -153,6 +165,7 @@ function parseReport(argv) {
   const telemetry = takeValue(argv, "--telemetry");
   const out = takeValue(argv, "--out") ?? "dashboard/index.html";
 
+  refuseLeftovers(argv, "report");
   return Object.freeze({
     command: "report",
     dashboard: true,

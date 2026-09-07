@@ -25,7 +25,8 @@ import { recordedProvider } from "../scout/provider-recorded.mjs";
 import { liveProvider } from "../scout/provider-live.mjs";
 import { createEgress } from "../gates/egress.mjs";
 import { briefFromKernel } from "../kernel/brief.mjs";
-import { processReport, processUnattended } from "../gates/pipeline.mjs";
+import { processReport } from "../gates/pipeline.mjs";
+import { allowUnattended } from "../gates/autonomy.mjs";
 import { RESEARCH_CONFIG_ID } from "../gates/evals.mjs";
 import { drainAll } from "../worker/drain.mjs";
 import { slug } from "./commands.mjs";
@@ -81,7 +82,14 @@ export function createScoutServer(opts, deps) {
   const egressFor = (request) =>
     createEgress({ allowDomains: request.domain ? [request.domain] : [], out: stdout });
 
-  const process = opts.unattended ? processUnattended : processReport;
+  // Unattended mode gates on autonomy as a PRE-GATE in the worker: the streak is
+  // checked BEFORE any job is claimed, so an un-earned worker leaves verified
+  // requests pristine rather than poisoning them (see the worker header). The
+  // pipeline itself is always the attended processReport — the worker owns the
+  // permission decision, so it is made exactly once, before work, not after.
+  const autonomyCheck = opts.unattended
+    ? () => allowUnattended(RESEARCH_CONFIG_ID, { telemetryPath: opts.telemetry, gateN: opts.gateN })
+    : undefined;
 
   const tick = () =>
     drainAll({
@@ -92,8 +100,8 @@ export function createScoutServer(opts, deps) {
       reportPathFor: (r) => join(opts.reports, `${slug(r.accountName)}-${slug(r.requestId)}.md`),
       telemetryPath: opts.telemetry,
       configId: RESEARCH_CONFIG_ID,
-      process,
-      gateN: opts.gateN,
+      process: processReport,
+      autonomyCheck,
       now,
     });
 
@@ -102,6 +110,35 @@ export function createScoutServer(opts, deps) {
 
 /** How often the worker sweeps the queue when serving, in ms. */
 export const DEFAULT_TICK_MS = 1000;
+
+/**
+ * Wrap a tick so it can never overlap itself. A live research run routinely
+ * outlasts one interval; without this guard a second interval fire would peek
+ * and claim the SAME job the first is still working (two poison attempts for one
+ * job) and record its verdict twice (inflating the autonomy streak). While a
+ * tick is in flight, further calls are no-ops. A tick that throws is reported
+ * via onError and the guard still clears, so one failed sweep cannot freeze the
+ * server's cadence.
+ *
+ * @param {() => Promise<any>} tickFn
+ * @param {{onError?: (err: Error) => void}} [opts]
+ * @returns {() => Promise<{ran: any} | {skipped: true} | {error: Error}>}
+ */
+export function guardedTicker(tickFn, { onError } = {}) {
+  let running = false;
+  return async () => {
+    if (running) return { skipped: true };
+    running = true;
+    try {
+      return { ran: await tickFn() };
+    } catch (err) {
+      onError?.(err);
+      return { error: err };
+    } finally {
+      running = false;
+    }
+  };
+}
 
 /**
  * `scout serve` — listen for signed deliveries and drain the queue on a cadence.
@@ -126,10 +163,12 @@ export function serveCommand(opts, deps) {
   }
 
   return new Promise((resolve) => {
-    const timer = setInterval(() => {
-      // A tick failure must never take the listener down — log and keep serving.
-      scout.tick().catch((err) => stderr.write(`worker tick failed: ${err?.message ?? err}\n`));
-    }, tickMs);
+    // Guarded so a slow (live) tick can never overlap the next interval fire —
+    // overlap would double-count telemetry and inflate the autonomy streak.
+    const tick = guardedTicker(scout.tick, {
+      onError: (err) => stderr.write(`worker tick failed: ${err?.message ?? err}\n`),
+    });
+    const timer = setInterval(tick, tickMs);
     timer.unref?.();
 
     scout.server.on("close", () => {

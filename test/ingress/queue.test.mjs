@@ -62,6 +62,17 @@ test("completing a job that was never enqueued is refused rather than silently a
   assert.equal((await queue.nextJob()).requestId, "req_001", "the real job is untouched");
 });
 
+test("the jobs directory is created when it does not exist", async () => {
+  // A first run on a clean checkout has no jobs/ at all, and a verified request must
+  // not be lost to a missing directory.
+  const dir = join(freshDir(), "jobs", "nested");
+  const queue = createJobQueue({ dir });
+
+  await queue.append(request("req_001", "Northwind Robotics"));
+
+  assert.equal((await queue.nextJob()).requestId, "req_001");
+});
+
 test("queue state survives a restart, because the file is the state", async () => {
   const dir = freshDir();
   const first = createJobQueue({ dir });

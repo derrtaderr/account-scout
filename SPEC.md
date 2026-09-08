@@ -97,10 +97,10 @@ this time by running waves). Trees are disjoint within each wave.
   gtm-agent-evals dashboard generated over the scout's own telemetry as a bundled
   artifact.
 
-Known wiring note for Lane D, flagged early: `gtm-agent-evals` has no `prepare`
-script, so a git install ships no `dist/`. The fix is one line in that repo
-(`"prepare": "tsc"`), is generally correct, and needs Jason's push-yes at ship
-time like any public change.
+Wiring note for Lane D, RESOLVED 2026-09-07: `gtm-agent-evals` used to ship with
+no build-on-install, so a git install shipped no `dist/`. Fixed upstream — that
+repo now carries `"prepare": "tsc"`, so a fresh install builds its own `dist/` and
+a clone of this repo installs clean with no manual step.
 
 ## Discipline (binding, the full house contract)
 

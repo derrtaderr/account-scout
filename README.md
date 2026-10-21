@@ -1,6 +1,25 @@
-# account-scout
+<p align="center">
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset="assets/account-scout-wordmark-dark.png">
+    <img src="assets/account-scout-wordmark-light.png" alt="account-scout" width="580">
+  </picture>
+  <br>
+  A GTM account-research agent whose claims must survive.
+</p>
 
-A GTM account-research agent whose claims must survive. Give it an account, it
+<p align="center">
+  <img src="https://img.shields.io/badge/node-%E2%89%A520-339933?logo=nodedotjs&logoColor=white" alt="Node 20 or newer">
+  <img src="https://img.shields.io/badge/dependencies-4%20first--party-F97316" alt="Four first-party dependencies">
+  <img src="https://img.shields.io/badge/API%20key-none%20for%20the%20demo-8B949E" alt="No API key for the demo">
+</p>
+
+<p align="center">
+  <a href="#see-it-run-end-to-end">
+    <img src="assets/account-scout-demo.gif" alt="Running npm run demo: three synthetic accounts researched on the recorded path, Northwind Robotics with 3 claims and 4 refusals, then the reports and dashboard regenerated under demo/." width="760">
+  </a>
+</p>
+
+Give it an account, it
 researches the open web in multiple hops and returns a report where **every claim
 is bound to a citation that was actually fetched in that run**. A claim that
 cannot carry its evidence is not quietly dropped — it is refused, listed, and

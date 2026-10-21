@@ -15,7 +15,7 @@
 
 <p align="center">
   <a href="#see-it-run-end-to-end">
-    <img src="assets/account-scout-demo.gif" alt="Running npm run demo: three synthetic accounts researched on the recorded path, Northwind Robotics with 3 claims and 4 refusals, then the evals dashboard written under demo/." width="760">
+    <img src="assets/account-scout-demo.gif" alt="Running npm run demo: three synthetic accounts researched on the recorded path, Northwind Robotics with 3 claims and 4 refusals, then the reports and dashboard regenerated under demo/." width="760">
   </a>
 </p>
 

@@ -58,8 +58,8 @@ regex wearing a robe.
 ## Install
 
 ```
-npm install                # first-party GitHub deps, no third-party runtime dep
-npm test                   # 222 tests, node:test, keyless
+npm install                # first-party GitHub deps; the Anthropic SDK comes in under gtm-agent-evals
+npm test                   # 232 tests, node:test, keyless
 ```
 
 Node 20+ (developed on 25). No API key is needed for the recorded path or the
